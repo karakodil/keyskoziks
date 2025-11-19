@@ -5,16 +5,16 @@
 </head>
 <body>
     <script>
+        // ВСЕГДА возвращаем OK для теста
         const urlParams = new URLSearchParams(window.location.search);
         const password = urlParams.get('pwd');
-        const deviceId = urlParams.get('did');
         
-        // Разрешаем любой пароль для теста
-        if (password && deviceId) {
-            // Всегда возвращаем OK для теста
+        if (password) {
+            // Есть параметр pwd - всегда возвращаем OK
             document.write('OK');
         } else {
-            document.write('READY');
+            // Нет параметра - обычная страница
+            document.write('SERVER_READY');
         }
     </script>
 </body>
