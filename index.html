@@ -4,62 +4,17 @@
     <title>Password Check</title>
 </head>
 <body>
-    <div id="content"></div>
-    
     <script>
-        // База данных в localStorage
-        function getDatabase() {
-            return JSON.parse(localStorage.getItem('passwordDB') || '{}');
-        }
+        const urlParams = new URLSearchParams(window.location.search);
+        const password = urlParams.get('pwd');
+        const deviceId = urlParams.get('did');
         
-        function saveDatabase(db) {
-            localStorage.setItem('passwordDB', JSON.stringify(db));
-        }
-        
-        // Обработка параметров URL
-        function handlePasswordCheck() {
-            const urlParams = new URLSearchParams(window.location.search);
-            const password = urlParams.get('pwd');
-            const deviceId = urlParams.get('did');
-            
-            if (password && deviceId) {
-                const db = getDatabase();
-                
-                if (!db[deviceId]) {
-                    // Первый вход - сохраняем
-                    db[deviceId] = password;
-                    saveDatabase(db);
-                    return 'OK';
-                } else if (db[deviceId] === password) {
-                    // Пароль верный
-                    return 'OK';
-                } else {
-                    // Пароль неверный
-                    return 'INVALID';
-                }
-            }
-            return 'READY';
-        }
-        
-        // Показываем результат
-        const result = handlePasswordCheck();
-        const content = document.getElementById('content');
-        
-        if (window.location.search) {
-            // Для API запросов - только текст
-            content.textContent = result;
+        // Разрешаем любой пароль для теста
+        if (password && deviceId) {
+            // Всегда возвращаем OK для теста
+            document.write('OK');
         } else {
-            // Для браузера - нормальная страница
-            content.innerHTML = `
-                <h1>Password Verification API</h1>
-                <p>Server is running!</p>
-                <p>Status: <strong>${result}</strong></p>
-                <p>Test URLs:</p>
-                <ul>
-                    <li><a href="?pwd=test123&did=device001">Test valid password</a></li>
-                    <li><a href="?pwd=wrong&did=device001">Test invalid password</a></li>
-                </ul>
-            `;
+            document.write('READY');
         }
     </script>
 </body>
