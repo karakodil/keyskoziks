@@ -2,81 +2,57 @@
 <html>
 <head>
     <title>Password Check</title>
-</head>
-<body>
-    <h1>Password Verification API</h1>
-    <p>Server is running!</p>
-    
     <script>
-        // База паролей (временная, сбрасывается при перезагрузке)
-        let passwordDatabase = {};
+        // База данных в localStorage
+        function getDatabase() {
+            return JSON.parse(localStorage.getItem('passwordDB') || '{}');
+        }
         
-        // Обработчик запросов
-        self.addEventListener('fetch', function(event) {
-            const url = new URL(event.request.url);
+        function saveDatabase(db) {
+            localStorage.setItem('passwordDB', JSON.stringify(db));
+        }
+        
+        // Обработка параметров URL
+        function handlePasswordCheck() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const password = urlParams.get('pwd');
+            const deviceId = urlParams.get('did');
             
-            // Проверяем пароль
-            if (url.pathname === '/check' && event.request.method === 'POST') {
-                event.respondWith(handlePasswordCheck(event.request));
-            }
-            // Главная страница
-            else if (url.pathname === '/' || url.pathname === '/index.html') {
-                event.respondWith(new Response('<h1>Password Server Works!</h1>', {
-                    headers: { 'Content-Type': 'text/html' }
-                }));
-            }
-        });
-        
-        async function handlePasswordCheck(request) {
-            try {
-                const formData = await request.formData();
-                const password = formData.get('pwd');
-                const deviceId = formData.get('did');
+            if (password && deviceId) {
+                const db = getDatabase();
                 
-                console.log('Check:', password, deviceId);
-                
-                // Логика проверки
-                if (!passwordDatabase[deviceId]) {
-                    // Первый вход - сохраняем пароль
-                    passwordDatabase[deviceId] = password;
-                    return new Response('OK', { 
-                        status: 200,
-                        headers: { 
-                            'Content-Type': 'text/plain',
-                            'Access-Control-Allow-Origin': '*'
-                        }
-                    });
-                } 
-                else if (passwordDatabase[deviceId] === password) {
+                if (!db[deviceId]) {
+                    // Первый вход - сохраняем
+                    db[deviceId] = password;
+                    saveDatabase(db);
+                    return 'OK';
+                } else if (db[deviceId] === password) {
                     // Пароль верный
-                    return new Response('OK', { 
-                        status: 200,
-                        headers: { 
-                            'Content-Type': 'text/plain',
-                            'Access-Control-Allow-Origin': '*'
-                        }
-                    });
-                } 
-                else {
+                    return 'OK';
+                } else {
                     // Пароль неверный
-                    return new Response('INVALID', { 
-                        status: 401,
-                        headers: { 
-                            'Content-Type': 'text/plain',
-                            'Access-Control-Allow-Origin': '*'
-                        }
-                    });
+                    return 'INVALID';
                 }
-            } catch (error) {
-                return new Response('ERROR', { 
-                    status: 500,
-                    headers: { 
-                        'Content-Type': 'text/plain',
-                        'Access-Control-Allow-Origin': '*'
-                    }
-                });
             }
+            return 'READY';
+        }
+        
+        // При загрузке страницы
+        const result = handlePasswordCheck();
+        
+        // Если есть параметры - показываем результат
+        if (window.location.search) {
+            document.write(result);
+        } else {
+            // Иначе показываем обычную страницу
+            document.body.innerHTML = `
+                <h1>Password Verification API</h1>
+                <p>Server is running!</p>
+                <p>Status: ${result}</p>
+            `;
         }
     </script>
+</head>
+<body>
 </body>
 </html>
