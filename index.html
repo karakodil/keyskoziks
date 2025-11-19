@@ -2,6 +2,10 @@
 <html>
 <head>
     <title>Password Check</title>
+</head>
+<body>
+    <div id="content"></div>
+    
     <script>
         // База данных в localStorage
         function getDatabase() {
@@ -37,22 +41,26 @@
             return 'READY';
         }
         
-        // При загрузке страницы
+        // Показываем результат
         const result = handlePasswordCheck();
+        const content = document.getElementById('content');
         
-        // Если есть параметры - показываем результат
         if (window.location.search) {
-            document.write(result);
+            // Для API запросов - только текст
+            content.textContent = result;
         } else {
-            // Иначе показываем обычную страницу
-            document.body.innerHTML = `
+            // Для браузера - нормальная страница
+            content.innerHTML = `
                 <h1>Password Verification API</h1>
                 <p>Server is running!</p>
-                <p>Status: ${result}</p>
+                <p>Status: <strong>${result}</strong></p>
+                <p>Test URLs:</p>
+                <ul>
+                    <li><a href="?pwd=test123&did=device001">Test valid password</a></li>
+                    <li><a href="?pwd=wrong&did=device001">Test invalid password</a></li>
+                </ul>
             `;
         }
     </script>
-</head>
-<body>
 </body>
 </html>
