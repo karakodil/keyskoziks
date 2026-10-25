@@ -9,10 +9,14 @@
 ================================================================================
 ]]
 
+local STAMP = tostring(os.time())
+
 local URLS = {
+	-- raw обновляется мгновенно, ?v= сбрасывает кэш CDN GitHub
+	"https://raw.githubusercontent.com/karakodil/keyskoziks/egg-scanner/StealAnEggScanner.lua?v=" .. STAMP,
+	-- запасное зеркало, если raw блокируется
 	"https://cdn.jsdelivr.net/gh/karakodil/keyskoziks@egg-scanner/StealAnEggScanner.lua",
-	"https://raw.githubusercontent.com/karakodil/keyskoziks/egg-scanner/StealAnEggScanner.lua",
-	"https://raw.githubusercontent.com/karakodil/keyskoziks/cline/r1zh20je/StealAnEggScanner.lua",
+	"https://raw.githubusercontent.com/karakodil/keyskoziks/cline/r1zh20je/StealAnEggScanner.lua?v=" .. STAMP,
 }
 
 local function fetch(url)

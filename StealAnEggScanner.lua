@@ -81,7 +81,7 @@ local CONFIG = {
 	SCAN_REPLICATED   = false,       -- сканировать ещё и ReplicatedStorage
 	SHOW_GUI          = true,        -- небольшое окно со статусом
 	AUTO_RELOAD       = true,        -- queue_on_teleport: перезапуск после телепорта
-	SCRIPT_URL        = "https://cdn.jsdelivr.net/gh/karakodil/keyskoziks@egg-scanner/StealAnEggScanner.lua",
+	SCRIPT_URL        = "https://raw.githubusercontent.com/karakodil/keyskoziks/egg-scanner/StealAnEggScanner.lua",
 	                                 -- можно заменить на свою raw-ссылку
 
 	VERBOSE           = true,
@@ -793,7 +793,7 @@ local UI = {
 }
 
 local logLines = {}
-local LOG_LINES_MAX = 8
+local LOG_LINES_MAX = 10
 
 local function refreshLog()
 	if not UI.logLabel then
@@ -854,13 +854,14 @@ local function makeButton(parent, caption, x, callback)
 	return button
 end
 
--- Диагностика: что вообще есть у яиц (атрибуты, значения) — вывод на экран
+-- Диагностика: имена числовых атрибутов по всей карте + данные яиц
 local function collectDiagnostics(limit)
 	local lines = {}
 	local eggCount, withAttrs, scanned = 0, 0, 0
+	local attributeSummary = {} -- имя атрибута -> { count, max }
 	local stack = { workspace }
 
-	while #stack > 0 and #lines < limit do
+	while #stack > 0 do
 		local instance = table.remove(stack)
 		scanned = scanned + 1
 
@@ -868,38 +869,63 @@ local function collectDiagnostics(limit)
 			break
 		end
 
-		if instance ~= workspace and instance.Parent ~= nil and isEggName(instance.Name) then
-			eggCount = eggCount + 1
-
-			local parts = {}
-			local okAttrs, attributes = pcall(function()
+		-- сводку собираем только по первым 40к объектам, чтобы не тормозило
+		local attributes = nil
+		if scanned <= 40000 then
+			local okAttrs, result = pcall(function()
 				return instance:GetAttributes()
 			end)
-			if okAttrs and type(attributes) == "table" then
+			if okAttrs and type(result) == "table" then
+				attributes = result
 				for name, value in pairs(attributes) do
-					parts[#parts + 1] = tostring(name) .. "=" .. tostring(value)
+					local number = parseNumber(value)
+					if number and number > 0 then
+						local entry = attributeSummary[name]
+						if not entry then
+							entry = { count = 0, max = number }
+							attributeSummary[name] = entry
+						end
+						entry.count = entry.count + 1
+						if number > entry.max then
+							entry.max = number
+						end
+					end
 				end
 			end
+		end
 
-			for _, child in ipairs(instance:GetChildren()) do
-				if child:IsA("ValueBase") then
-					parts[#parts + 1] = child.Name .. "=" .. tostring(child.Value)
+		if instance ~= workspace and instance.Parent ~= nil
+			and isEggName(instance.Name) and not instance:IsA("Folder") then
+			eggCount = eggCount + 1
+
+			if #lines < limit then
+				local parts = {}
+				if attributes then
+					for name, value in pairs(attributes) do
+						parts[#parts + 1] = tostring(name) .. "=" .. tostring(value)
+					end
 				end
-			end
 
-			if #parts > 0 then
-				withAttrs = withAttrs + 1
-			end
+				for _, child in ipairs(instance:GetChildren()) do
+					if child:IsA("ValueBase") then
+						parts[#parts + 1] = child.Name .. "=" .. tostring(child.Value)
+					end
+				end
 
-			local text = table.concat(parts, ", ")
-			if #text > 44 then
-				text = text:sub(1, 44) .. "..."
-			end
-			if text == "" then
-				text = "нет атрибутов"
-			end
+				if #parts > 0 then
+					withAttrs = withAttrs + 1
+				end
 
-			lines[#lines + 1] = instance.Name:sub(1, 14) .. ": " .. text
+				local text = table.concat(parts, ", ")
+				if #text > 40 then
+					text = text:sub(1, 40) .. "..."
+				end
+				if text == "" then
+					text = "нет атрибутов"
+				end
+
+				lines[#lines + 1] = instance.Name:sub(1, 14) .. ": " .. text
+			end
 		end
 
 		for _, child in ipairs(instance:GetChildren()) do
@@ -911,7 +937,19 @@ local function collectDiagnostics(limit)
 		end
 	end
 
-	return lines, eggCount, withAttrs, scanned
+	-- самые «дорогие» числовые атрибуты первыми
+	local summary = {}
+	for name, entry in pairs(attributeSummary) do
+		summary[#summary + 1] = { name = name, count = entry.count, max = entry.max }
+	end
+	table.sort(summary, function(a, b)
+		if a.max ~= b.max then
+			return a.max > b.max
+		end
+		return a.count > b.count
+	end)
+
+	return lines, eggCount, withAttrs, scanned, summary
 end
 
 local function createStatusGui()
@@ -942,7 +980,7 @@ local function createStatusGui()
 		gui.DisplayOrder = 1000
 
 		local frame = Instance.new("Frame")
-		frame.Size = UDim2.fromOffset(300, 230)
+		frame.Size = UDim2.fromOffset(300, 250)
 		frame.Position = UDim2.fromOffset(10, 10)
 		frame.BackgroundColor3 = Color3.fromRGB(16, 17, 22)
 		frame.BackgroundTransparency = 0.1
@@ -983,7 +1021,7 @@ local function createStatusGui()
 		status.Parent = frame
 
 		local logLabel = Instance.new("TextLabel")
-		logLabel.Size = UDim2.new(1, -12, 0, 118)
+		logLabel.Size = UDim2.new(1, -12, 0, 138)
 		logLabel.Position = UDim2.fromOffset(6, 56)
 		logLabel.BackgroundTransparency = 1
 		logLabel.Font = Enum.Font.SourceSans
@@ -997,7 +1035,7 @@ local function createStatusGui()
 
 		local buttons = Instance.new("Frame")
 		buttons.Size = UDim2.new(1, 0, 0, 34)
-		buttons.Position = UDim2.fromOffset(0, 186)
+		buttons.Position = UDim2.fromOffset(0, 206)
 		buttons.BackgroundTransparency = 1
 		buttons.Parent = frame
 
@@ -1229,14 +1267,29 @@ end
 
 UI.actions.dump = function()
 	setStatus("Дамп атрибутов...")
-	local lines, eggCount, withAttrs, scanned = collectDiagnostics(6)
+	local lines, eggCount, withAttrs, scanned, summary = collectDiagnostics(3)
+
 	addLog(string.format(
 		"Дамп: объектов %d, с egg %d, с данными %d",
 		scanned, eggCount, withAttrs
 	))
+
+	if #summary == 0 then
+		addLog("Числовых атрибутов в workspace нет вообще")
+	else
+		for index = 1, math.min(4, #summary) do
+			local entry = summary[index]
+			addLog(string.format(
+				"атр %s x%d = %s",
+				entry.name, entry.count, formatNumber(entry.max)
+			))
+		end
+	end
+
 	for _, line in ipairs(lines) do
 		addLog(line)
 	end
+
 	setStatus("Дамп готов — смотри лог")
 end
 
@@ -1267,6 +1320,7 @@ if isTest then
 		getServers   = getServers,
 		hopServer    = hopServer,
 		sendWebhook  = sendWebhook,
+		collectDiagnostics = collectDiagnostics,
 	}
 	return
 end
