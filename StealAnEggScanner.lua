@@ -90,7 +90,7 @@ local CONFIG = {
 --=========================== СЛУЖБЫ И ХЕЛПЕРЫ ===============================--
 
 local PREFIX  = "[EggScanner]"
-local VERSION = "v4-recon"
+local VERSION = "v5-egg"
 
 local Players           = game:GetService("Players")
 local TeleportService   = game:GetService("TeleportService")
@@ -245,7 +245,7 @@ local function getServers(maxPages)
 
 	repeat
 		local url = string.format(
-			"https://games.roblox.com/v1/games/%d/servers/Public?limit=%d&sortOrder=Desc",
+			"https://games.roblox.com/v1/games/%d/servers/Public?limit=%d&sortOrder=Asc",
 			CONFIG.PLACE_ID,
 			CONFIG.SERVERS_PER_PAGE
 		)
@@ -360,7 +360,27 @@ local function hopServer(reason)
 	log(string.format("Серверов в API: %d, подходящих: %d", #servers, #candidates))
 
 	if #candidates == 0 then
-		log("Подходящих нет — Teleport() (может вернуть на тот же сервер)")
+		-- серверы со свободными местами закончились — берём любые, кроме своего
+		log("Свободных нет — беру любые серверы, кроме своего")
+
+		for _, server in ipairs(servers) do
+			if server.id ~= game.JobId then
+				candidates[#candidates + 1] = {
+					id = server.id,
+					free = (tonumber(server.maxPlayers) or 0) - (tonumber(server.playing) or 0),
+					ping = tonumber(server.ping) or 999,
+				}
+			end
+		end
+
+		for index = #candidates, 2, -1 do
+			local swap = math.random(1, index)
+			candidates[index], candidates[swap] = candidates[swap], candidates[index]
+		end
+	end
+
+	if #candidates == 0 then
+		log("Серверов нет вообще — Teleport() (может вернуть на тот же сервер)")
 		local ok = pcall(function()
 			TeleportService:Teleport(CONFIG.PLACE_ID, LocalPlayer)
 		end)
@@ -844,15 +864,15 @@ local function setStatus(text)
 	end)
 end
 
-local function makeButton(parent, caption, x, callback)
+local function makeButton(parent, caption, x, width, callback)
 	local button = Instance.new("TextButton")
-	button.Size = UDim2.fromOffset(68, 32)
+	button.Size = UDim2.fromOffset(width or 68, 32)
 	button.Position = UDim2.fromOffset(x, 0)
 	button.BackgroundColor3 = Color3.fromRGB(45, 48, 60)
 	button.BorderSizePixel = 0
 	button.AutoButtonColor = true
 	button.Font = Enum.Font.SourceSansSemibold
-	button.TextSize = 14
+	button.TextSize = 12
 	button.TextColor3 = Color3.fromRGB(240, 240, 240)
 	button.Text = caption
 	button.Parent = parent
@@ -1236,6 +1256,239 @@ local function collectRecon()
 	return text, scanned, #eggList
 end
 
+--============================= ИНСПЕКТОР ЯЙЦА ================================--
+
+local function describeValue(value, depth, budget, seen)
+	if budget.left <= 0 then
+		return "..."
+	end
+
+	local valueType = type(value)
+
+	if valueType == "table" then
+		if seen[value] then
+			return "<cycle>"
+		end
+		seen[value] = true
+
+		if depth <= 0 then
+			return "{...}"
+		end
+
+		local keys = {}
+		for key in pairs(value) do
+			keys[#keys + 1] = key
+		end
+		table.sort(keys, function(a, b)
+			return tostring(a) < tostring(b)
+		end)
+
+		local parts = {}
+		for _, key in ipairs(keys) do
+			if budget.left <= 0 then
+				parts[#parts + 1] = "..."
+				break
+			end
+			budget.left = budget.left - 1
+			parts[#parts + 1] = tostring(key) .. "=" .. describeValue(value[key], depth - 1, budget, seen)
+		end
+
+		return "{" .. table.concat(parts, ", ") .. "}"
+	end
+
+	if valueType == "string" then
+		local text = tostring(value):gsub("\n", " ")
+		if #text > 46 then
+			text = text:sub(1, 46) .. "..."
+		end
+		return '"' .. text .. '"'
+	end
+
+	if valueType == "number" then
+		if value >= 1e6 then
+			return formatNumber(value)
+		end
+		return tostring(value)
+	end
+
+	return tostring(value)
+end
+
+local function describeInstance(instance, depth, lines, budget)
+	if budget.left <= 0 then
+		return
+	end
+	budget.left = budget.left - 1
+
+	local indent = string.rep("  ", depth)
+	local label = string.format("%s%s (%s)",
+		indent, tostring(instance.Name):sub(1, 40), instance.ClassName)
+
+	local extra = {}
+
+	local okAttrs, attributes = pcall(function()
+		return instance:GetAttributes()
+	end)
+	if okAttrs and type(attributes) == "table" then
+		local count = 0
+		for name, value in pairs(attributes) do
+			count = count + 1
+			if count <= 5 then
+				extra[#extra + 1] = tostring(name) .. "=" .. tostring(value):sub(1, 26)
+			end
+		end
+	end
+
+	if instance:IsA("ValueBase") then
+		extra[#extra + 1] = "value=" .. tostring(instance.Value):sub(1, 30)
+	elseif instance:IsA("TextLabel") or instance:IsA("TextButton") then
+		local text = tostring(instance.Text):gsub("\n", " ")
+		extra[#extra + 1] = "text=" .. text:sub(1, 44)
+	end
+
+	if #extra > 0 then
+		label = label .. "  " .. table.concat(extra, " | ")
+	end
+
+	lines[#lines + 1] = label
+
+	if depth >= 4 then
+		return
+	end
+
+	for _, child in ipairs(instance:GetChildren()) do
+		describeInstance(child, depth + 1, lines, budget)
+	end
+end
+
+-- Ищем яйца-образцы: имя содержит egg, это не Folder, и у него есть дети
+local function findEggSamples(limit)
+	local samples = {}
+	local stack = { workspace }
+	local scanned = 0
+
+	while #stack > 0 and #samples < limit do
+		local instance = table.remove(stack)
+		scanned = scanned + 1
+
+		if scanned > 80000 then
+			break
+		end
+
+		local matched = instance ~= workspace
+			and instance.Parent ~= nil
+			and isEggName(instance.Name)
+			and not instance:IsA("Folder")
+
+		if matched then
+			local children = instance:GetChildren()
+			if #children > 0 then
+				samples[#samples + 1] = instance
+			end
+		end
+
+		if not matched then
+			for _, child in ipairs(instance:GetChildren()) do
+				stack[#stack + 1] = child
+			end
+		end
+
+		if scanned % 2000 == 0 then
+			task.wait()
+		end
+	end
+
+	return samples, scanned
+end
+
+-- Пробуем выполнить конфиг-модули и показать, что внутри
+local function dumpDataModules(lines)
+	if not ReplicatedStorage then
+		lines[#lines + 1] = "нет ReplicatedStorage"
+		return
+	end
+
+	local data = ReplicatedStorage:FindFirstChild("Data")
+	if not data then
+		lines[#lines + 1] = "нет папки ReplicatedStorage.Data"
+		return
+	end
+
+	for _, child in ipairs(data:GetChildren()) do
+		if child:IsA("ModuleScript") then
+			lines[#lines + 1] = "[Module] " .. child.Name
+
+			local ok, result = pcall(function()
+				return require(child)
+			end)
+
+			if ok then
+				local budget = { left = 45 }
+				lines[#lines + 1] = "  " .. describeValue(result, 2, budget, {}):sub(1, 1500)
+			else
+				lines[#lines + 1] = "  require error: " .. tostring(result):sub(1, 90)
+			end
+		end
+	end
+end
+
+local function collectEggInspect()
+	local lines = {}
+	local function add(...)
+		lines[#lines + 1] = string.format(...)
+	end
+
+	add("EGG INSPECT %s | Job %s", VERSION, tostring(game.JobId):sub(1, 8))
+
+	local samples, scanned = findEggSamples(2)
+	add("просмотрено объектов: %d | найдено образцов: %d", scanned, #samples)
+	add("")
+
+	for index, egg in ipairs(samples) do
+		add("=== Яйцо %d: %s ===", index, shortPath(egg, 80))
+
+		local okAttrs, attributes = pcall(function()
+			return egg:GetAttributes()
+		end)
+		if okAttrs and type(attributes) == "table" then
+			local parts = {}
+			for name, value in pairs(attributes) do
+				parts[#parts + 1] = tostring(name) .. "=" .. tostring(value):sub(1, 30)
+			end
+			add("атрибуты (%d): %s", #parts, table.concat(parts, ", "):sub(1, 800))
+		end
+
+		add("дерево:")
+		describeInstance(egg, 1, lines, { left = 80 })
+		add("")
+	end
+
+	add("[ReplicatedStorage.Data]")
+	dumpDataModules(lines)
+	add("")
+
+	if ReplicatedStorage then
+		local mutations = ReplicatedStorage:FindFirstChild("Mutations")
+		if mutations then
+			local names = {}
+			for _, child in ipairs(mutations:GetChildren()) do
+				names[#names + 1] = child.Name
+				if #names >= 12 then
+					break
+				end
+			end
+			add("[Mutations] %s", table.concat(names, ", "):sub(1, 300))
+		end
+	end
+
+	local text = table.concat(lines, "\n")
+	if #text > 12000 then
+		text = text:sub(1, 12000) .. "\n... (обрезано)"
+	end
+
+	return text, #samples
+end
+
 local function createStatusGui()
 	if not CONFIG.SHOW_GUI then
 		return
@@ -1323,25 +1576,31 @@ local function createStatusGui()
 		buttons.BackgroundTransparency = 1
 		buttons.Parent = frame
 
-		makeButton(buttons, "Скан", 8, function()
+		makeButton(buttons, "Скан", 4, 54, function()
 			if UI.actions.scan then
 				UI.actions.scan()
 			end
 		end)
 
-		makeButton(buttons, "Хоп", 82, function()
+		makeButton(buttons, "Хоп", 63, 54, function()
 			if UI.actions.hop then
 				UI.actions.hop()
 			end
 		end)
 
-		makeButton(buttons, "Дамп", 156, function()
+		makeButton(buttons, "Яйцо", 122, 54, function()
+			if UI.actions.egg then
+				UI.actions.egg()
+			end
+		end)
+
+		makeButton(buttons, "Дамп", 181, 54, function()
 			if UI.actions.dump then
 				UI.actions.dump()
 			end
 		end)
 
-		makeButton(buttons, "Стоп", 230, function()
+		makeButton(buttons, "Стоп", 240, 54, function()
 			if UI.actions.stop then
 				UI.actions.stop()
 			end
@@ -1587,6 +1846,39 @@ UI.actions.dump = function()
 	end
 end
 
+UI.actions.egg = function()
+	setStatus("Инспектор яйца...")
+	addLog("Разбираю яйцо и конфиг-модули...")
+
+	local text, samples = collectEggInspect()
+
+	addLog(string.format("Инспектор: образцов яиц %d", samples))
+
+	if writefile then
+		pcall(writefile, "egg_inspect.txt", text)
+	end
+
+	local parts = splitMessage(text)
+	local sent = 0
+
+	for index = 1, math.min(#parts, 6) do
+		if sendDiscordMessage(parts[index]) then
+			sent = sent + 1
+		end
+		task.wait(1)
+	end
+
+	if sent > 0 then
+		addLog(string.format("Инспектор отправлен в Discord: %d сообщ.", sent))
+		setStatus("Инспектор в Discord")
+	else
+		for line in text:gmatch("[^\n]+") do
+			addLog(line:sub(1, 60))
+		end
+		setStatus("Discord недоступен — лог на экране")
+	end
+end
+
 UI.actions.stop = function()
 	running = false
 	setStatus("Остановлено")
@@ -1615,6 +1907,7 @@ if isTest then
 		hopServer    = hopServer,
 		sendWebhook  = sendWebhook,
 		collectRecon = collectRecon,
+		collectEggInspect = collectEggInspect,
 	}
 	return
 end
