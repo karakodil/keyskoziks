@@ -90,7 +90,7 @@ local CONFIG = {
 --=========================== СЛУЖБЫ И ХЕЛПЕРЫ ===============================--
 
 local PREFIX  = "[EggScanner]"
-local VERSION = "v5-egg"
+local VERSION = "v6-biomes"
 
 local Players           = game:GetService("Players")
 local TeleportService   = game:GetService("TeleportService")
@@ -556,6 +556,64 @@ local function isEggName(name)
 	return string.find(string.lower(name), "egg", 1, true) ~= nil
 end
 
+-- Яйцо может называться как угодно, если лежит в WorldEggs / EggNests / EggSpawn
+local function isEggLike(instance)
+	if instance:IsA("Folder") then
+		return false
+	end
+
+	if isEggName(instance.Name) then
+		return true
+	end
+
+	local node = instance.Parent
+	for _ = 1, 3 do
+		if not node or node == workspace then
+			break
+		end
+		if isEggName(node.Name) then
+			return true
+		end
+		node = node.Parent
+	end
+
+	return false
+end
+
+-- Биом: ближайший предок с "Dimension" в имени (EnchantedForestDimension и т.п.)
+local function getBiomeName(instance)
+	local node = instance.Parent
+	for _ = 1, 4 do
+		if not node or node == workspace then
+			break
+		end
+		if string.find(string.lower(node.Name), "dimension", 1, true) then
+			return node.Name
+		end
+		node = node.Parent
+	end
+	return "?"
+end
+
+-- UID яйца: HalloweenEggUid, EggUid, ...
+local function getEggUid(instance)
+	local ok, attributes = pcall(function()
+		return instance:GetAttributes()
+	end)
+
+	if not ok or type(attributes) ~= "table" then
+		return nil, nil
+	end
+
+	for name, value in pairs(attributes) do
+		if string.find(string.lower(tostring(name)), "uid", 1, true) then
+			return tostring(value), tostring(name)
+		end
+	end
+
+	return nil, nil
+end
+
 --[[
 	Обход workspace (DFS, без рекурсии — не переполнит стек).
 	Яйцом считаем объект, если:
@@ -578,13 +636,18 @@ local function collectEggs()
 		if not seen[instance] and instance.Parent ~= nil then
 			local income = readStat(instance, INCOME_ATTRS)
 			local value  = readStat(instance, VALUE_ATTRS)
-			if income or value then
+			local uid, uidName = getEggUid(instance)
+
+			if income or value or uid then
 				seen[instance] = true
 				results[#results + 1] = {
 					instance = instance,
 					name     = instance.Name,
 					income   = income or 0,
 					value    = value or 0,
+					uid      = uid,
+					uidName  = uidName,
+					biome    = getBiomeName(instance),
 				}
 			end
 		end
@@ -607,20 +670,23 @@ local function collectEggs()
 		local shouldDescend = true
 
 		if instance ~= workspace and instance.Parent ~= nil then
-			local matched = tagged[instance]
-				or (isEggName(instance.Name) and not instance:IsA("Folder"))
+			local matched = tagged[instance] or isEggLike(instance)
 
 			if matched and not seen[instance] then
 				local income = readStat(instance, INCOME_ATTRS)
 				local value  = readStat(instance, VALUE_ATTRS)
+				local uid, uidName = getEggUid(instance)
 
-				if income or value then
+				if income or value or uid then
 					seen[instance] = true
 					results[#results + 1] = {
 						instance = instance,
 						name     = instance.Name,
 						income   = income or 0,
 						value    = value or 0,
+						uid      = uid,
+						uidName  = uidName,
+						biome    = getBiomeName(instance),
 					}
 					shouldDescend = false
 				end
@@ -659,6 +725,9 @@ local function scanServer()
 				value    = egg.value,
 				score    = score,
 				instance = egg.instance,
+				biome    = egg.biome or "?",
+				uid      = egg.uid,
+				uidName  = egg.uidName,
 			}
 		end
 	end
@@ -766,6 +835,8 @@ local function sendWebhook(egg, metric)
 					{ name = "Цена (Value)",   value = formatNumber(egg.value),      inline = true },
 					{ name = "Порог",          value = formatNumber(CONFIG.THRESHOLD), inline = true },
 					{ name = "Игроки",         value = string.format("%d/%d", players, maxPlayers), inline = true },
+					{ name = "Биом",          value = tostring(egg.biome or "?"), inline = true },
+					{ name = "UID",           value = tostring(egg.uid or "-"), inline = true },
 					{ name = "JobId",          value = "`" .. tostring(jobId) .. "`", inline = false },
 					{ name = "Зайти на сервер", value = "[прямая ссылка](" .. deepLink .. ")", inline = false },
 				},
@@ -1218,6 +1289,37 @@ local function collectRecon()
 	end
 	if #nameHits == 0 then
 		add("нет")
+	end
+	add("")
+
+	-- биомы: папки типа EnchantedForestDimension
+	local biomeCount = 0
+	local biomeLines = {}
+	for _, child in ipairs(workspace:GetChildren()) do
+		local lower = string.lower(child.Name)
+		if string.find(lower, "dimension", 1, true) or string.find(lower, "biome", 1, true) then
+			biomeCount = biomeCount + 1
+			if #biomeLines < 15 then
+				local eggsFolder = child:FindFirstChild("WorldEggs")
+						or child:FindFirstChild("Eggs")
+						or child:FindFirstChild("EggNests")
+				local eggCount = "нет"
+				if eggsFolder then
+					eggCount = tostring(#(eggsFolder:GetChildren()))
+				end
+				biomeLines[#biomeLines + 1] = string.format("%s (%s) | яиц: %s",
+					tostring(child.Name):sub(1, 34), child.ClassName, eggCount)
+			end
+		end
+	end
+
+	add("[Биомы] найдено: %d", biomeCount)
+	if biomeCount == 0 then
+		add("нет папок с Dimension/Biome в Workspace")
+	else
+		for _, line in ipairs(biomeLines) do
+			add(line)
+		end
 	end
 	add("")
 
@@ -1718,15 +1820,17 @@ local function main()
 
 			if best then
 				log(string.format(
-					"Топ: %s | Income=%s | Value=%s | типов яиц: %d",
-					best.name,
+					"Топ: %s [%s] | Income=%s | Value=%s | UID=%s | типов: %d",
+					best.name, tostring(best.biome),
 					formatNumber(best.income),
 					formatNumber(best.value),
+					tostring(best.uid or "-"),
 					types
 				))
 				setStatus(string.format(
-					"Топ: %s\n%s (типов: %d)\nJobId: %s",
-					best.name, formatNumber(best.score), types, tostring(game.JobId)
+					"Топ: %s [%s]\n%s | UID %s\nJobId: %s",
+					best.name, tostring(best.biome), formatNumber(best.score),
+					tostring(best.uid or "-"), tostring(game.JobId)
 				))
 			else
 				log("Яйца не найдены (типов: " .. tostring(types) .. ")")
