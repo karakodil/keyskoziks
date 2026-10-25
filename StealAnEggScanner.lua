@@ -1,0 +1,929 @@
+--[[
+================================================================================
+    Steal An Egg — сканер яиц + сервер-хоппер
+    PlaceId: 107778070777162
+    Исполнители: Synapse X / Solara / Delta / Wave / Fluxus и т.п.
+================================================================================
+
+    ЧТО ДЕЛАЕТ:
+      1. Ждёт загрузку карты и сканирует сервер: ищет объекты с тегом "Egg",
+         с "Egg" в имени, либо с атрибутами Value / Income.
+      2. Определяет самое дорогое яйцо (по Income, Value или максимуму из них).
+      3. Если порог (по умолчанию 5B) пройден — отправляет данные в Discord
+         вебхук: JobId, имя яйца, доход/цену, число игроков и прямую ссылку.
+      4. Телепортируется (хоп) на другой публичный сервер, где есть свободные
+         места, и повторяет всё заново.
+
+    КАК ЗАПУСТИТЬ:
+      1. Впиши ссылку на вебхук в CONFIG.WEBHOOK_URL (иначе будет только лог).
+      2. (Необязательно) чтобы скрипт сам перезапускался после телепорта —
+         залей этот файл на GitHub (raw) / pastebin и укажи ссылку
+         в CONFIG.SCRIPT_URL. Тогда используется queue_on_teleport.
+      3. Вставь код в исполнитель и нажми Execute. Остановка — RightShift.
+
+    ЕСЛИ ЯЙЦА НЕ НАХОДЯТСЯ:
+      - В этой игре цены могут лежать в других атрибутах — допиши их имена
+        в INCOME_ATTRS / VALUE_ATTRS (блок "СКАНИРОВАНИЕ").
+      - Что вообще есть на карте, можно глянуть в консоли исполнителя:
+          for _, o in ipairs(workspace:GetDescendants()) do
+              local i, v = o:GetAttribute("Income"), o:GetAttribute("Value")
+              if i or v then print(o:GetFullName(), i, v) end
+          end
+      - Яйца вне workspace (в ReplicatedStorage) — включи SCAN_REPLICATED = true.
+      - Если карта грузится долго — увеличь SCAN_INTERVAL (сейчас 3 сек).
+
+    ВАЖНО:
+      - Скрипт клиентский. TeleportService на клиенте иногда блокируется
+        игрой/исполнителем, поэтому телепорт обёрнут в pcall и имеет
+        резервный вариант Teleport(placeId).
+      - Автоматизация, сервер-хопинг и сторонние исполнители нарушают
+        правила Roblox. Используй на свой риск.
+================================================================================
+]]
+
+--============================== НАСТРОЙКИ ==================================--
+
+local CONFIG = {
+	PLACE_ID          = 107778070777162,
+
+	-- Ссылка на вебхук Discord: Server Settings -> Integrations -> Webhooks
+	WEBHOOK_URL       = "",          -- <-- ВСТАВЬ СВОЮ ССЫЛКУ
+
+	THRESHOLD         = 5e9,         -- порог: 5 000 000 000
+	THRESHOLD_MODE    = "max",       -- "max" | "income" | "value"
+	                                 --   max = максимум из Income и Value
+
+	SCAN_INTERVAL     = 3,           -- пауза перед сканом (карта успевает прогрузиться)
+	IDLE_WAIT_MIN     = 5,           -- пауза, если топ-яйца нет
+	IDLE_WAIT_MAX     = 10,
+	WEBHOOK_MIN_GAP   = 2,           -- wait(2) после вебхука перед хопом
+	WEBHOOK_COOLDOWN  = 300,         -- не спамить одним и тем же яйцом с того же JobId, сек
+
+	SERVERS_PER_PAGE  = 100,         -- лимит API
+	MAX_SERVER_PAGES  = 3,           -- сколько страниц серверов листать
+	MIN_FREE_SLOTS    = 1,           -- минимум свободных мест на целевом сервере
+	TELEPORT_COOLDOWN = 5,           -- антифлуд телепортов, сек
+
+	MAX_SCAN_OBJECTS  = 200000,      -- предохранитель от зависания на огромных картах
+	SCAN_REPLICATED   = false,       -- сканировать ещё и ReplicatedStorage
+	SHOW_GUI          = true,        -- небольшое окно со статусом
+	AUTO_RELOAD       = true,        -- queue_on_teleport (нужен SCRIPT_URL)
+	SCRIPT_URL        = "",          -- raw-ссылка на этот скрипт
+
+	VERBOSE           = true,
+}
+
+--=========================== СЛУЖБЫ И ХЕЛПЕРЫ ===============================--
+
+local PREFIX = "[EggScanner]"
+
+local Players           = game:GetService("Players")
+local TeleportService   = game:GetService("TeleportService")
+local HttpService       = game:GetService("HttpService")
+local CollectionService = game:GetService("CollectionService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService  = game:GetService("UserInputService")
+
+local LocalPlayer = Players.LocalPlayer
+if not LocalPlayer then
+	repeat
+		task.wait(0.1)
+		LocalPlayer = Players.LocalPlayer
+	until LocalPlayer
+end
+
+-- Защита от двойного запуска в одном клиенте
+if getgenv then
+	if getgenv().__EGG_SCANNER_RUNNING then
+		warn(PREFIX, "Скрипт уже запущен в этом клиенте.")
+		return
+	end
+	getgenv().__EGG_SCANNER_RUNNING = true
+end
+
+local function log(...)
+	if CONFIG.VERBOSE then
+		print(PREFIX, ...)
+	end
+end
+
+--============================ HTTP (request) ================================--
+
+-- В разных исполнителях функция называется по-разному
+local function getRequestFunction()
+	return (syn and syn.request) or (http and http.request) or http_request or request
+end
+
+-- Приводим ответ к единому виду: status, body, headers
+local function normalizeResponse(response)
+	if type(response) ~= "table" then
+		return nil
+	end
+	local status  = response.StatusCode or response.status_code or response.status
+	local body    = response.Body or response.body
+	local headers = response.Headers or response.headers or {}
+	if not status and response.Success == true then
+		status = 200
+	end
+	return status, body, headers
+end
+
+local function decodeJson(body)
+	if type(body) ~= "string" or #body == 0 then
+		return nil
+	end
+	local ok, data = pcall(function()
+		return HttpService:JSONDecode(body)
+	end)
+	if ok and type(data) == "table" then
+		return data
+	end
+	return nil
+end
+
+-- GET JSON: сначала request/syn.request, при 401/403 — game:HttpGet
+local function fetchJson(url)
+	local requestFn = getRequestFunction()
+	if requestFn then
+		local ok, response = pcall(requestFn, {
+			Url = url,
+			Method = "GET",
+			Headers = { Accept = "application/json" },
+		})
+		if ok then
+			local status, body, headers = normalizeResponse(response)
+			if status == 200 then
+				local data = decodeJson(body)
+				if data then
+					return data
+				end
+				return nil, "не удалось распарсить JSON"
+			elseif status == 429 then
+				local retryAfter = tonumber(headers["retry-after"] or headers["Retry-After"]) or 5
+				return nil, "HTTP 429 (rate limit)", retryAfter
+			elseif status and status ~= 401 and status ~= 403 then
+				return nil, "HTTP " .. tostring(status)
+			end
+			-- 401/403 — пробуем game:HttpGet ниже (в Synapse он идёт с куки)
+		end
+	end
+
+	local ok, body = pcall(function()
+		return game:HttpGet(url)
+	end)
+	if ok then
+		local data = decodeJson(body)
+		if data then
+			return data
+		end
+	end
+
+	return nil, "не удалось получить ответ API"
+end
+
+--=========================== СПИСОК СЕРВЕРОВ ================================--
+
+--[[
+	GET https://games.roblox.com/v1/games/<placeId>/servers/Public?limit=100
+	Ответ:
+	{
+	  previousPageCursor = nil,
+	  nextPageCursor     = "eyJzdGFydEluZGV4...",
+	  data = {
+	    { id = "<JobId>", maxPlayers = 7, playing = 6, ping = 27, fps = 59.9 },
+	    ...
+	  }
+	}
+	Поле id — это и есть JobId инстанса.
+]]
+local function getServers(maxPages)
+	maxPages = maxPages or CONFIG.MAX_SERVER_PAGES
+
+	local servers, seen = {}, {}
+	local cursor, pages = nil, 0
+
+	repeat
+		local url = string.format(
+			"https://games.roblox.com/v1/games/%d/servers/Public?limit=%d&sortOrder=Desc",
+			CONFIG.PLACE_ID,
+			CONFIG.SERVERS_PER_PAGE
+		)
+		if cursor then
+			url = url .. "&cursor=" .. HttpService:UrlEncode(cursor)
+		end
+
+		local data, err, retryAfter = fetchJson(url)
+		if not data then
+			log("getServers(): " .. tostring(err))
+			if retryAfter then
+				task.wait(retryAfter)
+			end
+			break
+		end
+
+		local batch = data.data
+		if type(batch) ~= "table" or #batch == 0 then
+			break
+		end
+
+		for _, server in ipairs(batch) do
+			if type(server) == "table" and type(server.id) == "string" and not seen[server.id] then
+				seen[server.id] = true
+				servers[#servers + 1] = server
+			end
+		end
+
+		cursor = data.nextPageCursor
+		pages = pages + 1
+	until not cursor or pages >= maxPages
+
+	return servers
+end
+
+-- Случайный сервер, где есть свободные места и это не наш текущий сервер
+local function pickServer(servers)
+	local candidates = {}
+
+	for _, server in ipairs(servers) do
+		local maxPlayers = tonumber(server.maxPlayers) or 0
+		local playing    = tonumber(server.playing) or 0
+		local free       = maxPlayers - playing
+
+		if server.id ~= game.JobId and free >= CONFIG.MIN_FREE_SLOTS then
+			candidates[#candidates + 1] = {
+				id   = server.id,
+				free = free,
+				ping = tonumber(server.ping) or 999,
+			}
+		end
+	end
+
+	if #candidates == 0 then
+		return nil
+	end
+
+	return candidates[math.random(1, #candidates)]
+end
+
+-- Автоперезапуск скрипта после телепорта (нужен CONFIG.SCRIPT_URL)
+local function queueReload()
+	if not CONFIG.AUTO_RELOAD or CONFIG.SCRIPT_URL == "" then
+		return
+	end
+
+	local queueFn = queue_on_teleport
+		or (syn and syn.queue_on_teleport)
+		or (fluxus and fluxus.queue_on_teleport)
+
+	if type(queueFn) ~= "function" then
+		log("queue_on_teleport недоступен — после хопа запусти скрипт вручную")
+		return
+	end
+
+	local code = string.format('loadstring(game:HttpGet("%s"))()', CONFIG.SCRIPT_URL)
+	local ok, err = pcall(queueFn, code)
+	if not ok then
+		warn(PREFIX, "queue_on_teleport: " .. tostring(err))
+	end
+end
+
+--============================== СЕРВЕР-ХОП ==================================--
+
+local lastTeleportAt = 0
+
+local function hopServer(reason)
+	-- антифлуд телепортов
+	local elapsed = os.clock() - lastTeleportAt
+	if elapsed < CONFIG.TELEPORT_COOLDOWN then
+		task.wait(CONFIG.TELEPORT_COOLDOWN - elapsed)
+	end
+	lastTeleportAt = os.clock()
+
+	local jobBefore = game.JobId
+
+	log("Ищу сервер для хопа (" .. tostring(reason) .. ")")
+	local servers = getServers()
+	local target  = pickServer(servers)
+
+	if target then
+		log(string.format(
+			"Цель: %s (свободно %d, ping %d). Всего серверов в списке: %d",
+			target.id, target.free, target.ping, #servers
+		))
+	else
+		log("Подходящих серверов не найдено — пробую Teleport() по PlaceId")
+	end
+
+	queueReload()
+
+	-- 1) Телепорт на конкретный JobId
+	if target then
+		local ok, err = pcall(function()
+			TeleportService:TeleportToPlaceInstance(CONFIG.PLACE_ID, target.id, LocalPlayer)
+		end)
+
+		if ok then
+			-- Если телепорт реально начался, клиент перезайдёт и эта строка
+			-- уже не выполнится. Если выполнилась — проверяем JobId.
+			task.wait(3)
+			if game.JobId ~= jobBefore then
+				return true
+			end
+			warn(PREFIX, "Телепорт на JobId не подтвердился, пробую резервный вариант")
+		else
+			warn(PREFIX, "TeleportToPlaceInstance: " .. tostring(err))
+		end
+	end
+
+	-- 2) Резерв: обычный телепорт на любую инстанцию плейса
+	local ok, err = pcall(function()
+		TeleportService:Teleport(CONFIG.PLACE_ID, LocalPlayer)
+	end)
+
+	if ok then
+		log("Хоп через Teleport() выполнен")
+		return true
+	end
+
+	warn(PREFIX, "Teleport(): " .. tostring(err))
+	return false
+end
+
+--============================= СКАНИРОВАНИЕ =================================--
+
+-- Какие атрибуты/значения считаем "доходом" и "ценой"
+local INCOME_ATTRS = {
+	"Income", "income", "IncomePerSecond", "IncomePerSec",
+	"PerSecond", "EPS", "Earnings", "Earn",
+}
+local VALUE_ATTRS = {
+	"Value", "value", "Worth", "Price", "Cost", "SellPrice",
+}
+
+local EGG_TAG = "Egg"
+
+-- "1.5B", "$5,000,000", "12.3M/sec", 5e9 -> число
+local function parseNumber(value)
+	if type(value) == "number" then
+		return value
+	elseif type(value) ~= "string" then
+		return nil
+	end
+
+	local text = value:lower():gsub(",", ""):gsub("%s", ""):gsub("%$", "")
+	local digits, suffix = text:match("([%d%.]+)([kmbtq]?)")
+	if not digits then
+		return nil
+	end
+
+	local number = tonumber(digits)
+	if not number then
+		return nil
+	end
+
+	local multipliers = { k = 1e3, m = 1e6, b = 1e9, t = 1e12, q = 1e15 }
+	return number * (multipliers[suffix] or 1)
+end
+
+-- Ищем число в атрибутах объекта, его ValueBase-детях и папках (Config/Stats и т.п.)
+local function readStat(object, names, depth)
+	depth = depth or 0
+	if not object then
+		return nil
+	end
+
+	for _, name in ipairs(names) do
+		local ok, value = pcall(object.GetAttribute, object, name)
+		if ok and value ~= nil then
+			local number = parseNumber(value)
+			if number then
+				return number
+			end
+		end
+	end
+
+	local children = object:GetChildren()
+
+	for _, child in ipairs(children) do
+		if child:IsA("ValueBase") then
+			local childName = child.Name:lower()
+			for _, name in ipairs(names) do
+				if childName == name:lower() then
+					local number = parseNumber(child.Value)
+					if number then
+						return number
+					end
+				end
+			end
+		end
+	end
+
+	-- Иногда статы лежат на уровень глубже: Egg -> Config -> Value
+	if depth < 2 then
+		for _, child in ipairs(children) do
+			if child:IsA("Folder") or child:IsA("Configuration") or child:IsA("Model") then
+				local number = readStat(child, names, depth + 1)
+				if number then
+					return number
+				end
+			end
+		end
+	end
+
+	return nil
+end
+
+local function isEggName(name)
+	return string.find(string.lower(name), "egg", 1, true) ~= nil
+end
+
+--[[
+	Обход workspace (DFS, без рекурсии — не переполнит стек).
+	Яйцом считаем объект, если:
+	  - на нём тег "Egg", или
+	  - в имени есть "egg" (и это не Folder-контейнер),
+	  и при этом у него реально есть Value/Income (иначе это просто папка).
+	Внутрь найденного яйца не спускаемся, чтобы не ловить его части.
+]]
+local function collectEggs()
+	local results   = {}
+	local seen      = {}
+	local scanned   = 0
+	local truncated = false
+
+	local tagged = {}
+	for _, instance in ipairs(CollectionService:GetTagged(EGG_TAG)) do
+		tagged[instance] = true
+
+		-- Тег — самый надёжный признак, учитываем такое яйцо даже вне workspace
+		if not seen[instance] and instance.Parent ~= nil then
+			local income = readStat(instance, INCOME_ATTRS)
+			local value  = readStat(instance, VALUE_ATTRS)
+			if income or value then
+				seen[instance] = true
+				results[#results + 1] = {
+					instance = instance,
+					name     = instance.Name,
+					income   = income or 0,
+					value    = value or 0,
+				}
+			end
+		end
+	end
+
+	local stack = { workspace }
+	if CONFIG.SCAN_REPLICATED then
+		stack[#stack + 1] = ReplicatedStorage
+	end
+
+	while #stack > 0 do
+		local instance = table.remove(stack)
+
+		scanned = scanned + 1
+		if scanned > CONFIG.MAX_SCAN_OBJECTS then
+			truncated = true
+			break
+		end
+
+		local shouldDescend = true
+
+		if instance ~= workspace and instance.Parent ~= nil then
+			local matched = tagged[instance]
+				or (isEggName(instance.Name) and not instance:IsA("Folder"))
+
+			if matched and not seen[instance] then
+				local income = readStat(instance, INCOME_ATTRS)
+				local value  = readStat(instance, VALUE_ATTRS)
+
+				if income or value then
+					seen[instance] = true
+					results[#results + 1] = {
+						instance = instance,
+						name     = instance.Name,
+						income   = income or 0,
+						value    = value or 0,
+					}
+					shouldDescend = false
+				end
+			end
+		end
+
+		if shouldDescend then
+			for _, child in ipairs(instance:GetChildren()) do
+				stack[#stack + 1] = child
+			end
+		end
+
+		-- отдаём поток раз в 2000 объектов, чтобы не фризить клиент
+		if scanned % 2000 == 0 then
+			task.wait()
+		end
+	end
+
+	return results, truncated
+end
+
+-- Собираем лучшее яйцо по каждому имени, затем выбираем максимум
+local function scanServer()
+	local eggs, truncated = collectEggs()
+
+	local byName = {}
+	for _, egg in ipairs(eggs) do
+		local score = math.max(egg.income, egg.value)
+		local key = string.lower(egg.name)
+		local previous = byName[key]
+
+		if not previous or score > previous.score then
+			byName[key] = {
+				name     = egg.name,
+				income   = egg.income,
+				value    = egg.value,
+				score    = score,
+				instance = egg.instance,
+			}
+		end
+	end
+
+	local best, types = nil, 0
+	for _, entry in pairs(byName) do
+		types = types + 1
+		if not best or entry.score > best.score then
+			best = entry
+		end
+	end
+
+	return best, types, truncated
+end
+
+-- Прошло ли яйцо порог (с учётом THRESHOLD_MODE)
+local function isValuable(egg)
+	if not egg then
+		return false, 0
+	end
+
+	local metric
+	if CONFIG.THRESHOLD_MODE == "income" then
+		metric = egg.income
+	elseif CONFIG.THRESHOLD_MODE == "value" then
+		metric = egg.value
+	else
+		metric = math.max(egg.income, egg.value)
+	end
+
+	return metric >= CONFIG.THRESHOLD, metric
+end
+
+-- 1500000000 -> "1.50B"
+local function formatNumber(number)
+	if type(number) ~= "number" then
+		return "?"
+	end
+
+	local units = {
+		{ 1e15, "Q" }, { 1e12, "T" }, { 1e9, "B" }, { 1e6, "M" }, { 1e3, "K" },
+	}
+
+	for _, unit in ipairs(units) do
+		if number >= unit[1] then
+			return string.format("%.2f%s", number / unit[1], unit[2])
+		end
+	end
+
+	return string.format("%d", math.floor(number))
+end
+
+--============================= DISCORD WEBHOOK ==============================--
+
+-- Не отправляем одно и то же яйцо с того же сервера чаще WEBHOOK_COOLDOWN
+local reported = {}
+
+local function eggKey(egg)
+	return string.format("%s|%s", game.JobId or "?", string.lower(egg.name))
+end
+
+local function alreadyReported(egg)
+	local last = reported[eggKey(egg)]
+	return last ~= nil and (os.time() - last) < CONFIG.WEBHOOK_COOLDOWN
+end
+
+local function markReported(egg)
+	reported[eggKey(egg)] = os.time()
+end
+
+local function sendWebhook(egg, metric)
+	if CONFIG.WEBHOOK_URL == "" then
+		log(string.format(
+			"WEBHOOK_URL пуст — только лог. Яйцо: %s | Income=%s | Value=%s",
+			egg.name, formatNumber(egg.income), formatNumber(egg.value)
+		))
+		return false
+	end
+
+	local requestFn = getRequestFunction()
+	if not requestFn then
+		warn(PREFIX, "Нет request/syn.request — вебхук отправить нечем")
+		return false
+	end
+
+	local jobId      = game.JobId
+	local players    = #Players:GetPlayers()
+	local maxPlayers = Players.MaxPlayers
+	local deepLink   = string.format(
+		"https://www.roblox.com/games/start?placeId=%d&gameInstanceId=%s",
+		CONFIG.PLACE_ID, jobId
+	)
+
+	local payload = {
+		username = "Egg Scanner",
+		content  = string.format("🥚 **%s** — %s", egg.name, formatNumber(metric)),
+		embeds = {
+			{
+				title       = "Найдено дорогое яйцо",
+				color       = 0x2ECC71,
+				description = string.format("Сервер `%s`", jobId),
+				fields = {
+					{ name = "Яйцо",           value = egg.name,                     inline = true },
+					{ name = "Доход (Income)", value = formatNumber(egg.income),     inline = true },
+					{ name = "Цена (Value)",   value = formatNumber(egg.value),      inline = true },
+					{ name = "Порог",          value = formatNumber(CONFIG.THRESHOLD), inline = true },
+					{ name = "Игроки",         value = string.format("%d/%d", players, maxPlayers), inline = true },
+					{ name = "JobId",          value = "`" .. tostring(jobId) .. "`", inline = false },
+					{ name = "Зайти на сервер", value = "[прямая ссылка](" .. deepLink .. ")", inline = false },
+				},
+				footer    = { text = "Steal An Egg • egg scanner" },
+				timestamp = DateTime.now():ToIsoDate(),
+			},
+		},
+	}
+
+	local body = HttpService:JSONEncode(payload)
+
+	for attempt = 1, 3 do
+		local ok, response = pcall(requestFn, {
+			Url     = CONFIG.WEBHOOK_URL,
+			Method  = "POST",
+			Headers = { ["Content-Type"] = "application/json" },
+			Body    = body,
+		})
+
+		if not ok then
+			warn(PREFIX, "Вебхук не отправлен: " .. tostring(response))
+			break
+		end
+
+		local status, responseBody = normalizeResponse(response)
+
+		if status == 204 or status == 200 then
+			log(string.format("Вебхук отправлен: %s (%s)", egg.name, formatNumber(metric)))
+			return true
+		end
+
+		if status == 429 then
+			local waitTime = 2
+			local decoded = decodeJson(responseBody or "")
+			if type(decoded) == "table" and tonumber(decoded.retry_after) then
+				waitTime = tonumber(decoded.retry_after)
+			end
+			warn(PREFIX, string.format("Discord rate limit, жду %.1f сек", waitTime))
+			task.wait(waitTime)
+		else
+			warn(PREFIX, string.format(
+				"Вебхук вернул статус %s: %s",
+				tostring(status), tostring(responseBody)
+			))
+			break
+		end
+	end
+
+	return false
+end
+
+--================================= GUI ======================================--
+
+local running = true
+local statusLabel = nil
+
+local function setStatus(text)
+	if not statusLabel then
+		return
+	end
+	pcall(function()
+		statusLabel.Text = text
+	end)
+end
+
+local function createStatusGui()
+	if not CONFIG.SHOW_GUI then
+		return
+	end
+
+	local ok, err = pcall(function()
+		local parent = (gethui and gethui()) or LocalPlayer:WaitForChild("PlayerGui")
+
+		local gui = Instance.new("ScreenGui")
+		gui.Name = "EggScannerStatus"
+		gui.ResetOnSpawn = false
+		gui.IgnoreGuiInset = true
+		gui.DisplayOrder = 1000
+
+		local frame = Instance.new("Frame")
+		frame.Size = UDim2.fromOffset(250, 76)
+		frame.Position = UDim2.fromOffset(12, 12)
+		frame.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
+		frame.BackgroundTransparency = 0.15
+		frame.BorderSizePixel = 0
+		frame.Parent = gui
+
+		local corner = Instance.new("UICorner")
+		corner.CornerRadius = UDim.new(0, 8)
+		corner.Parent = frame
+
+		local title = Instance.new("TextLabel")
+		title.Size = UDim2.new(1, -16, 0, 18)
+		title.Position = UDim2.fromOffset(8, 6)
+		title.BackgroundTransparency = 1
+		title.Font = Enum.Font.GothamBold
+		title.TextSize = 13
+		title.TextColor3 = Color3.fromRGB(120, 230, 150)
+		title.TextXAlignment = Enum.TextXAlignment.Left
+		title.Text = "Egg Scanner • Steal An Egg"
+		title.Parent = frame
+
+		local label = Instance.new("TextLabel")
+		label.Size = UDim2.new(1, -16, 0, 42)
+		label.Position = UDim2.fromOffset(8, 26)
+		label.BackgroundTransparency = 1
+		label.Font = Enum.Font.Gotham
+		label.TextSize = 12
+		label.TextWrapped = true
+		label.TextXAlignment = Enum.TextXAlignment.Left
+		label.TextYAlignment = Enum.TextYAlignment.Top
+		label.TextColor3 = Color3.fromRGB(235, 235, 235)
+		label.Text = "Запуск... (RightShift — стоп)"
+		label.Parent = frame
+
+		gui.Parent = parent
+		statusLabel = label
+	end)
+
+	if not ok then
+		warn(PREFIX, "GUI не создан: " .. tostring(err))
+	end
+end
+
+-- Остановка по RightShift
+pcall(function()
+	UserInputService.InputBegan:Connect(function(input, processed)
+		if processed then
+			return
+		end
+		if input.KeyCode == Enum.KeyCode.RightShift then
+			running = false
+			setStatus("Остановлено (RightShift)")
+			if getgenv then
+				getgenv().__EGG_SCANNER_RUNNING = nil
+			end
+			log("Остановлено пользователем")
+		end
+	end)
+end)
+
+--============================= ГЛАВНЫЙ ЦИКЛ =================================--
+
+local function waitForGame(timeout)
+	local deadline = os.clock() + (timeout or 30)
+	while not game:IsLoaded() and os.clock() < deadline do
+		task.wait(0.25)
+	end
+end
+
+local function main()
+	log(string.format(
+		"Старт. PlaceId=%d, порог=%s (%s)",
+		CONFIG.PLACE_ID, formatNumber(CONFIG.THRESHOLD), CONFIG.THRESHOLD_MODE
+	))
+	if CONFIG.WEBHOOK_URL == "" then
+		warn(PREFIX, "WEBHOOK_URL не задан — уведомления будут только в консоли")
+	end
+
+	createStatusGui()
+
+	setStatus("Ожидание загрузки карты...")
+	waitForGame(30)
+
+	-- даём игре прогрузить объекты
+	task.wait(CONFIG.SCAN_INTERVAL)
+
+	local failedHops = 0
+	local scansOnThisServer = 0
+	local lastJob = game.JobId
+
+	while running do
+		local ok, err = pcall(function()
+			if game.JobId ~= lastJob then
+				lastJob = game.JobId
+				scansOnThisServer = 0
+			end
+			scansOnThisServer = scansOnThisServer + 1
+
+			setStatus("Сканирование сервера...")
+
+			local best, types, truncated = scanServer()
+
+			if truncated then
+				log("Скан остановлен лимитом MAX_SCAN_OBJECTS — возможно, карта слишком большая")
+			end
+
+			if best then
+				log(string.format(
+					"Топ: %s | Income=%s | Value=%s | типов яиц: %d",
+					best.name,
+					formatNumber(best.income),
+					formatNumber(best.value),
+					types
+				))
+				setStatus(string.format(
+					"Топ: %s\n%s (типов: %d)\nJobId: %s",
+					best.name, formatNumber(best.score), types, tostring(game.JobId)
+				))
+			else
+				log("Яйца не найдены (типов: " .. tostring(types) .. ")")
+				setStatus("Яйца не найдены\nJobId: " .. tostring(game.JobId))
+			end
+
+			local valuable, metric = isValuable(best)
+
+			if valuable then
+				if alreadyReported(best) then
+					log("Это яйцо с этого сервера уже отправлялось — вебхук пропущен")
+					task.wait(CONFIG.SCAN_INTERVAL)
+				else
+					if sendWebhook(best, metric) then
+						markReported(best)
+					end
+					task.wait(CONFIG.WEBHOOK_MIN_GAP)
+				end
+			else
+				-- пусто: небольшая случайная пауза перед хопом
+				task.wait(math.random(CONFIG.IDLE_WAIT_MIN, CONFIG.IDLE_WAIT_MAX))
+			end
+
+			if not running then
+				return
+			end
+
+			setStatus("Хоп на другой сервер...")
+			local hopped = hopServer(valuable and "найдено топ-яйцо" or "пустой сервер")
+
+			if not hopped then
+				failedHops = failedHops + 1
+				local backoff = math.min(60, 5 * failedHops)
+				warn(PREFIX, string.format(
+					"Хоп не удался (%d подряд). Пауза %d сек", failedHops, backoff
+				))
+				task.wait(backoff)
+			else
+				failedHops = 0
+				-- если телепорт всё-таки не случился, не долбим сервер и API сразу
+				if scansOnThisServer >= 3 then
+					warn(PREFIX, "Телепорт не срабатывает (JobId не меняется) — пауза 30 сек")
+					task.wait(30)
+				else
+					task.wait(5)
+				end
+			end
+		end)
+
+		if not ok then
+			warn(PREFIX, "Ошибка в главном цикле: " .. tostring(err))
+			setStatus("Ошибка: " .. tostring(err))
+			task.wait(5)
+		end
+	end
+
+	setStatus("Скрипт остановлен")
+	log("Завершено")
+end
+
+--[[
+	Автозапуск. Хук ниже нужен только для тестов вне Roblox:
+	getgenv().__EGG_SCANNER_TEST = true отключает запуск и отдаёт функции наружу.
+]]
+if getgenv and getgenv().__EGG_SCANNER_TEST then
+	getgenv().__EGG_SCANNER_API = {
+		CONFIG       = CONFIG,
+		parseNumber  = parseNumber,
+		formatNumber = formatNumber,
+		readStat     = readStat,
+		collectEggs  = collectEggs,
+		scanServer   = scanServer,
+		isValuable   = isValuable,
+		pickServer   = pickServer,
+		getServers   = getServers,
+		hopServer    = hopServer,
+		sendWebhook  = sendWebhook,
+	}
+else
+	main()
+end
+
