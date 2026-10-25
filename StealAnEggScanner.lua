@@ -14,12 +14,25 @@
       4. Телепортируется (хоп) на другой публичный сервер, где есть свободные
          места, и повторяет всё заново.
 
-    КАК ЗАПУСТИТЬ:
-      1. Впиши ссылку на вебхук в CONFIG.WEBHOOK_URL (иначе будет только лог).
-      2. (Необязательно) чтобы скрипт сам перезапускался после телепорта —
-         залей этот файл на GitHub (raw) / pastebin и укажи ссылку
-         в CONFIG.SCRIPT_URL. Тогда используется queue_on_teleport.
-      3. Вставь код в исполнитель и нажми Execute. Остановка — RightShift.
+    ЗАПУСК С ТЕЛЕФОНА (проще всего):
+      Вставь в исполнитель содержимое loader.lua (~30 строк) — он скачает
+      полный скрипт с GitHub (два зеркала) и покажет ошибку прямо на экране,
+      если что-то не загрузилось.
+
+    ЧТО БУДЕТ НА ЭКРАНЕ:
+      Слева сверху появляется панель «EGG SCANNER v3-mobile» с логом и кнопками:
+        Скан — разовый скан текущего сервера;
+        Хоп  — разовый хоп на другой сервер;
+        Дамп — показать, что реально есть у яиц (атрибуты/значения);
+        Стоп — остановить скрипт.
+      Панель перетаскивается за заголовок. RightShift тоже останавливает.
+
+    ЕСЛИ ПОСЛЕ ИНЖЕКТА «НИЧЕГО»:
+      - Полностью закрой Roblox и запусти снова: старые версии оставляли в
+        памяти флаг __EGG_SCANNER_RUNNING, из-за которого скрипт молча
+        завершался (в этой версии блокировка убрана).
+      - Панель создаётся ДО основного цикла, поэтому если её нет вообще —
+        скрипт не выполнился (неверный/обрезанный код, блокировка raw-ссылки).
 
     ЕСЛИ ЯЙЦА НЕ НАХОДЯТСЯ:
       - В этой игре цены могут лежать в других атрибутах — допиши их имена
@@ -47,7 +60,7 @@ local CONFIG = {
 	PLACE_ID          = 107778070777162,
 
 	-- Ссылка на вебхук Discord: Server Settings -> Integrations -> Webhooks
-	WEBHOOK_URL       = "",          -- <-- ВСТАВЬ СВОЮ ССЫЛКУ
+	WEBHOOK_URL       = "https://discord.com/api/webhooks/1564046515595649105/IRllOp8HwD5O-nNjDV51kII-XkQKkoQhRp97l5v2g40ZRtsSk7cDzGfkqV7r2jav7PTa",
 
 	THRESHOLD         = 5e9,         -- порог: 5 000 000 000
 	THRESHOLD_MODE    = "max",       -- "max" | "income" | "value"
@@ -67,15 +80,17 @@ local CONFIG = {
 	MAX_SCAN_OBJECTS  = 200000,      -- предохранитель от зависания на огромных картах
 	SCAN_REPLICATED   = false,       -- сканировать ещё и ReplicatedStorage
 	SHOW_GUI          = true,        -- небольшое окно со статусом
-	AUTO_RELOAD       = true,        -- queue_on_teleport (нужен SCRIPT_URL)
-	SCRIPT_URL        = "",          -- raw-ссылка на этот скрипт
+	AUTO_RELOAD       = true,        -- queue_on_teleport: перезапуск после телепорта
+	SCRIPT_URL        = "https://cdn.jsdelivr.net/gh/karakodil/keyskoziks@egg-scanner/StealAnEggScanner.lua",
+	                                 -- можно заменить на свою raw-ссылку
 
 	VERBOSE           = true,
 }
 
 --=========================== СЛУЖБЫ И ХЕЛПЕРЫ ===============================--
 
-local PREFIX = "[EggScanner]"
+local PREFIX  = "[EggScanner]"
+local VERSION = "v3-mobile"
 
 local Players           = game:GetService("Players")
 local TeleportService   = game:GetService("TeleportService")
@@ -86,24 +101,50 @@ local UserInputService  = game:GetService("UserInputService")
 
 local LocalPlayer = Players.LocalPlayer
 if not LocalPlayer then
+	-- Не ждём вечно: если игрок ещё не прогрузился, продолжаем
+	local deadline = os.clock() + 15
 	repeat
 		task.wait(0.1)
 		LocalPlayer = Players.LocalPlayer
-	until LocalPlayer
+	until LocalPlayer or os.clock() > deadline
 end
 
--- Защита от двойного запуска в одном клиенте
+-- Флаг запуска. ВАЖНО: здесь больше НЕТ `return`.
+-- Раньше при уже установленном флаге скрипт молча завершался — и после
+-- одного «мёртвого» запуска (например, недокопированного кода) все
+-- следующие инъекции ничего не делали.
 if getgenv then
-	if getgenv().__EGG_SCANNER_RUNNING then
-		warn(PREFIX, "Скрипт уже запущен в этом клиенте.")
-		return
-	end
 	getgenv().__EGG_SCANNER_RUNNING = true
+end
+
+-- Экранный лог (на телефоне консоль недоступна), назначается в блоке GUI
+local pushLog = nil
+
+-- Перехватываем warn, чтобы предупреждения тоже были видны на экране
+local rawWarn = warn
+local function warn(...)
+	if rawWarn then
+		rawWarn(...)
+	end
+	if pushLog then
+		local parts = {}
+		for index = 1, select("#", ...) do
+			parts[index] = tostring((select(index, ...)))
+		end
+		pushLog("! " .. table.concat(parts, " "))
+	end
 end
 
 local function log(...)
 	if CONFIG.VERBOSE then
 		print(PREFIX, ...)
+	end
+	if pushLog then
+		local parts = {}
+		for index = 1, select("#", ...) do
+			parts[index] = tostring((select(index, ...)))
+		end
+		pushLog(table.concat(parts, " "))
 	end
 end
 
@@ -385,6 +426,39 @@ local function parseNumber(value)
 	return number * (multipliers[suffix] or 1)
 end
 
+-- Иногда цена не в атрибутах, а в тексте над яйцом (BillboardGui -> TextLabel)
+local function readStatFromLabels(object, depth, visited)
+	depth = depth or 0
+	visited = visited or { count = 0 }
+
+	if not object or depth > 2 then
+		return nil
+	end
+
+	local children = object:GetChildren()
+	for _, child in ipairs(children) do
+		visited.count = visited.count + 1
+		if visited.count > 60 then
+			return nil
+		end
+		if child:IsA("TextLabel") or child:IsA("TextButton") then
+			local number = parseNumber(child.Text)
+			if number and number > 0 then
+				return number
+			end
+		end
+	end
+
+	for _, child in ipairs(children) do
+		local number = readStatFromLabels(child, depth + 1, visited)
+		if number then
+			return number
+		end
+	end
+
+	return nil
+end
+
 -- Ищем число в атрибутах объекта, его ValueBase-детях и папках (Config/Stats и т.п.)
 local function readStat(object, names, depth)
 	depth = depth or 0
@@ -427,6 +501,14 @@ local function readStat(object, names, depth)
 					return number
 				end
 			end
+		end
+	end
+
+	-- И последний вариант: число нарисовано в тексте над яйцом
+	if depth == 0 then
+		local labelNumber = readStatFromLabels(object)
+		if labelNumber then
+			return labelNumber
 		end
 	end
 
@@ -520,12 +602,12 @@ local function collectEggs()
 		end
 	end
 
-	return results, truncated
+	return results, truncated, scanned
 end
 
 -- Собираем лучшее яйцо по каждому имени, затем выбираем максимум
 local function scanServer()
-	local eggs, truncated = collectEggs()
+	local eggs, truncated, scanned = collectEggs()
 
 	local byName = {}
 	for _, egg in ipairs(eggs) do
@@ -552,7 +634,7 @@ local function scanServer()
 		end
 	end
 
-	return best, types, truncated
+	return best, types, truncated, scanned, eggs
 end
 
 -- Прошло ли яйцо порог (с учётом THRESHOLD_MODE)
@@ -698,18 +780,138 @@ local function sendWebhook(egg, metric)
 	return false
 end
 
---================================= GUI ======================================--
+--============================== ПАНЕЛЬ (GUI) ================================--
 
 local running = true
-local statusLabel = nil
 
-local function setStatus(text)
-	if not statusLabel then
+local UI = {
+	gui      = nil,
+	frame    = nil,
+	status   = nil,
+	logLabel = nil,
+	actions  = {}, -- заполняется в главном цикле
+}
+
+local logLines = {}
+local LOG_LINES_MAX = 8
+
+local function refreshLog()
+	if not UI.logLabel then
 		return
 	end
 	pcall(function()
-		statusLabel.Text = text
+		UI.logLabel.Text = table.concat(logLines, "\n")
 	end)
+end
+
+local function addLog(text)
+	text = tostring(text)
+	logLines[#logLines + 1] = text
+	while #logLines > LOG_LINES_MAX do
+		table.remove(logLines, 1)
+	end
+	refreshLog()
+	if rconsoleprint then
+		pcall(rconsoleprint, "[EggScanner] " .. text .. "\n")
+	end
+end
+
+pushLog = addLog
+
+local function setStatus(text)
+	if not UI.status then
+		return
+	end
+	pcall(function()
+		UI.status.Text = tostring(text)
+	end)
+end
+
+local function makeButton(parent, caption, x, callback)
+	local button = Instance.new("TextButton")
+	button.Size = UDim2.fromOffset(68, 32)
+	button.Position = UDim2.fromOffset(x, 0)
+	button.BackgroundColor3 = Color3.fromRGB(45, 48, 60)
+	button.BorderSizePixel = 0
+	button.AutoButtonColor = true
+	button.Font = Enum.Font.SourceSansSemibold
+	button.TextSize = 14
+	button.TextColor3 = Color3.fromRGB(240, 240, 240)
+	button.Text = caption
+	button.Parent = parent
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 6)
+	corner.Parent = button
+
+	button.Activated:Connect(function()
+		local ok, err = pcall(callback)
+		if not ok then
+			addLog("Ошибка кнопки: " .. tostring(err))
+		end
+	end)
+
+	return button
+end
+
+-- Диагностика: что вообще есть у яиц (атрибуты, значения) — вывод на экран
+local function collectDiagnostics(limit)
+	local lines = {}
+	local eggCount, withAttrs, scanned = 0, 0, 0
+	local stack = { workspace }
+
+	while #stack > 0 and #lines < limit do
+		local instance = table.remove(stack)
+		scanned = scanned + 1
+
+		if scanned > CONFIG.MAX_SCAN_OBJECTS then
+			break
+		end
+
+		if instance ~= workspace and instance.Parent ~= nil and isEggName(instance.Name) then
+			eggCount = eggCount + 1
+
+			local parts = {}
+			local okAttrs, attributes = pcall(function()
+				return instance:GetAttributes()
+			end)
+			if okAttrs and type(attributes) == "table" then
+				for name, value in pairs(attributes) do
+					parts[#parts + 1] = tostring(name) .. "=" .. tostring(value)
+				end
+			end
+
+			for _, child in ipairs(instance:GetChildren()) do
+				if child:IsA("ValueBase") then
+					parts[#parts + 1] = child.Name .. "=" .. tostring(child.Value)
+				end
+			end
+
+			if #parts > 0 then
+				withAttrs = withAttrs + 1
+			end
+
+			local text = table.concat(parts, ", ")
+			if #text > 44 then
+				text = text:sub(1, 44) .. "..."
+			end
+			if text == "" then
+				text = "нет атрибутов"
+			end
+
+			lines[#lines + 1] = instance.Name:sub(1, 14) .. ": " .. text
+		end
+
+		for _, child in ipairs(instance:GetChildren()) do
+			stack[#stack + 1] = child
+		end
+
+		if scanned % 2000 == 0 then
+			task.wait()
+		end
+	end
+
+	return lines, eggCount, withAttrs, scanned
 end
 
 local function createStatusGui()
@@ -718,52 +920,148 @@ local function createStatusGui()
 	end
 
 	local ok, err = pcall(function()
-		local parent = (gethui and gethui()) or LocalPlayer:WaitForChild("PlayerGui")
+		local parent = nil
+		if gethui then
+			local okHui, hui = pcall(gethui)
+			if okHui and hui then
+				parent = hui
+			end
+		end
+		if not parent and LocalPlayer then
+			parent = LocalPlayer:FindFirstChild("PlayerGui")
+				or LocalPlayer:WaitForChild("PlayerGui", 5)
+		end
+		if not parent then
+			parent = game:GetService("CoreGui")
+		end
 
 		local gui = Instance.new("ScreenGui")
-		gui.Name = "EggScannerStatus"
+		gui.Name = "EggScannerPanel"
 		gui.ResetOnSpawn = false
 		gui.IgnoreGuiInset = true
 		gui.DisplayOrder = 1000
 
 		local frame = Instance.new("Frame")
-		frame.Size = UDim2.fromOffset(250, 76)
-		frame.Position = UDim2.fromOffset(12, 12)
-		frame.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
-		frame.BackgroundTransparency = 0.15
+		frame.Size = UDim2.fromOffset(300, 230)
+		frame.Position = UDim2.fromOffset(10, 10)
+		frame.BackgroundColor3 = Color3.fromRGB(16, 17, 22)
+		frame.BackgroundTransparency = 0.1
 		frame.BorderSizePixel = 0
+		frame.Active = true
 		frame.Parent = gui
 
 		local corner = Instance.new("UICorner")
 		corner.CornerRadius = UDim.new(0, 8)
 		corner.Parent = frame
 
+		local stroke = Instance.new("UIStroke")
+		stroke.Color = Color3.fromRGB(60, 200, 120)
+		stroke.Thickness = 1
+		stroke.Transparency = 0.5
+		stroke.Parent = frame
+
 		local title = Instance.new("TextLabel")
-		title.Size = UDim2.new(1, -16, 0, 18)
-		title.Position = UDim2.fromOffset(8, 6)
+		title.Size = UDim2.new(1, 0, 0, 22)
 		title.BackgroundTransparency = 1
-		title.Font = Enum.Font.GothamBold
+		title.Font = Enum.Font.SourceSansBold
 		title.TextSize = 13
 		title.TextColor3 = Color3.fromRGB(120, 230, 150)
-		title.TextXAlignment = Enum.TextXAlignment.Left
-		title.Text = "Egg Scanner • Steal An Egg"
+		title.Text = "EGG SCANNER " .. VERSION .. "  •  Steal An Egg"
 		title.Parent = frame
 
-		local label = Instance.new("TextLabel")
-		label.Size = UDim2.new(1, -16, 0, 42)
-		label.Position = UDim2.fromOffset(8, 26)
-		label.BackgroundTransparency = 1
-		label.Font = Enum.Font.Gotham
-		label.TextSize = 12
-		label.TextWrapped = true
-		label.TextXAlignment = Enum.TextXAlignment.Left
-		label.TextYAlignment = Enum.TextYAlignment.Top
-		label.TextColor3 = Color3.fromRGB(235, 235, 235)
-		label.Text = "Запуск... (RightShift — стоп)"
-		label.Parent = frame
+		local status = Instance.new("TextLabel")
+		status.Size = UDim2.new(1, -12, 0, 30)
+		status.Position = UDim2.fromOffset(6, 24)
+		status.BackgroundTransparency = 1
+		status.Font = Enum.Font.SourceSansSemibold
+		status.TextSize = 13
+		status.TextWrapped = true
+		status.TextXAlignment = Enum.TextXAlignment.Left
+		status.TextYAlignment = Enum.TextYAlignment.Top
+		status.TextColor3 = Color3.fromRGB(255, 220, 120)
+		status.Text = "Запуск..."
+		status.Parent = frame
+
+		local logLabel = Instance.new("TextLabel")
+		logLabel.Size = UDim2.new(1, -12, 0, 118)
+		logLabel.Position = UDim2.fromOffset(6, 56)
+		logLabel.BackgroundTransparency = 1
+		logLabel.Font = Enum.Font.SourceSans
+		logLabel.TextSize = 12
+		logLabel.TextWrapped = true
+		logLabel.TextXAlignment = Enum.TextXAlignment.Left
+		logLabel.TextYAlignment = Enum.TextYAlignment.Top
+		logLabel.TextColor3 = Color3.fromRGB(220, 220, 225)
+		logLabel.Text = ""
+		logLabel.Parent = frame
+
+		local buttons = Instance.new("Frame")
+		buttons.Size = UDim2.new(1, 0, 0, 34)
+		buttons.Position = UDim2.fromOffset(0, 186)
+		buttons.BackgroundTransparency = 1
+		buttons.Parent = frame
+
+		makeButton(buttons, "Скан", 8, function()
+			if UI.actions.scan then
+				UI.actions.scan()
+			end
+		end)
+
+		makeButton(buttons, "Хоп", 82, function()
+			if UI.actions.hop then
+				UI.actions.hop()
+			end
+		end)
+
+		makeButton(buttons, "Дамп", 156, function()
+			if UI.actions.dump then
+				UI.actions.dump()
+			end
+		end)
+
+		makeButton(buttons, "Стоп", 230, function()
+			if UI.actions.stop then
+				UI.actions.stop()
+			end
+		end)
+
+		-- перетаскивание за заголовок (работает и на тач-экране)
+		local dragging, dragStart, startPosition = false, nil, nil
+
+		title.InputBegan:Connect(function(input)
+			if input.UserInputType == Enum.UserInputType.MouseButton1
+				or input.UserInputType == Enum.UserInputType.Touch then
+				dragging = true
+				dragStart = input.Position
+				startPosition = frame.Position
+
+				input.Changed:Connect(function()
+					if input.UserInputState == Enum.UserInputState.End then
+						dragging = false
+					end
+				end)
+			end
+		end)
+
+		UserInputService.InputChanged:Connect(function(input)
+			if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement
+				or input.UserInputType == Enum.UserInputType.Touch) then
+				local delta = input.Position - dragStart
+				frame.Position = UDim2.new(
+					startPosition.X.Scale,
+					startPosition.X.Offset + delta.X,
+					startPosition.Y.Scale,
+					startPosition.Y.Offset + delta.Y
+				)
+			end
+		end)
 
 		gui.Parent = parent
-		statusLabel = label
+		UI.gui = gui
+		UI.frame = frame
+		UI.status = status
+		UI.logLabel = logLabel
+		refreshLog()
 	end)
 
 	if not ok then
@@ -771,7 +1069,7 @@ local function createStatusGui()
 	end
 end
 
--- Остановка по RightShift
+-- Остановка по RightShift (на телефоне есть кнопка «Стоп»)
 pcall(function()
 	UserInputService.InputBegan:Connect(function(input, processed)
 		if processed then
@@ -779,11 +1077,11 @@ pcall(function()
 		end
 		if input.KeyCode == Enum.KeyCode.RightShift then
 			running = false
-			setStatus("Остановлено (RightShift)")
+			setStatus("Остановлено")
 			if getgenv then
 				getgenv().__EGG_SCANNER_RUNNING = nil
 			end
-			log("Остановлено пользователем")
+			addLog("Остановлено с клавиатуры")
 		end
 	end)
 end)
@@ -799,14 +1097,12 @@ end
 
 local function main()
 	log(string.format(
-		"Старт. PlaceId=%d, порог=%s (%s)",
-		CONFIG.PLACE_ID, formatNumber(CONFIG.THRESHOLD), CONFIG.THRESHOLD_MODE
+		"%s запущен. PlaceId=%d, порог=%s (%s)",
+		VERSION, CONFIG.PLACE_ID, formatNumber(CONFIG.THRESHOLD), CONFIG.THRESHOLD_MODE
 	))
 	if CONFIG.WEBHOOK_URL == "" then
-		warn(PREFIX, "WEBHOOK_URL не задан — уведомления будут только в консоли")
+		warn("WEBHOOK_URL не задан — уведомления будут только на экране")
 	end
-
-	createStatusGui()
 
 	setStatus("Ожидание загрузки карты...")
 	waitForGame(30)
@@ -828,7 +1124,12 @@ local function main()
 
 			setStatus("Сканирование сервера...")
 
-			local best, types, truncated = scanServer()
+			local best, types, truncated, scanned = scanServer()
+
+			addLog(string.format(
+				"Скан: объектов %d, типов %d, JobId %s",
+				scanned, types, tostring(game.JobId):sub(1, 8)
+			))
 
 			if truncated then
 				log("Скан остановлен лимитом MAX_SCAN_OBJECTS — возможно, карта слишком большая")
@@ -905,13 +1206,57 @@ local function main()
 	log("Завершено")
 end
 
---[[
-	Автозапуск. Хук ниже нужен только для тестов вне Roblox:
-	getgenv().__EGG_SCANNER_TEST = true отключает запуск и отдаёт функции наружу.
-]]
-if getgenv and getgenv().__EGG_SCANNER_TEST then
+--=========================== КНОПКИ ПАНЕЛИ ==================================--
+
+UI.actions.scan = function()
+	setStatus("Ручной скан...")
+	local best, types, truncated, scanned = scanServer()
+	addLog(string.format("Скан: объектов %d, типов %d", scanned, types))
+	if best then
+		addLog(string.format("Топ: %s = %s", best.name, formatNumber(best.score)))
+		setStatus(string.format("Топ: %s\n%s", best.name, formatNumber(best.score)))
+	else
+		addLog("Яиц с Value/Income нет — нажми «Дамп»")
+		setStatus("Яиц не найдено")
+	end
+end
+
+UI.actions.hop = function()
+	setStatus("Ручной хоп...")
+	local hopped = hopServer("вручную")
+	addLog(hopped and "Хоп запущен" or "Хоп не удался")
+end
+
+UI.actions.dump = function()
+	setStatus("Дамп атрибутов...")
+	local lines, eggCount, withAttrs, scanned = collectDiagnostics(6)
+	addLog(string.format(
+		"Дамп: объектов %d, с egg %d, с данными %d",
+		scanned, eggCount, withAttrs
+	))
+	for _, line in ipairs(lines) do
+		addLog(line)
+	end
+	setStatus("Дамп готов — смотри лог")
+end
+
+UI.actions.stop = function()
+	running = false
+	setStatus("Остановлено")
+	if getgenv then
+		getgenv().__EGG_SCANNER_RUNNING = nil
+	end
+	addLog("Остановлено кнопкой")
+end
+
+--=============================== АВТОЗАПУСК =================================--
+
+local isTest = getgenv and getgenv().__EGG_SCANNER_TEST
+
+if isTest then
 	getgenv().__EGG_SCANNER_API = {
 		CONFIG       = CONFIG,
+		VERSION      = VERSION,
 		parseNumber  = parseNumber,
 		formatNumber = formatNumber,
 		readStat     = readStat,
@@ -923,7 +1268,32 @@ if getgenv and getgenv().__EGG_SCANNER_TEST then
 		hopServer    = hopServer,
 		sendWebhook  = sendWebhook,
 	}
-else
-	main()
+	return
 end
 
+-- Панель создаём ДО цикла: даже если что-то упадёт, ошибка будет видна на экране
+createStatusGui()
+addLog(VERSION .. " загружен")
+setStatus("Инициализация...")
+
+pcall(function()
+	game:GetService("StarterGui"):SetCore("SendNotification", {
+		Title = "Egg Scanner " .. VERSION,
+		Text = "Скрипт запущен, панель слева сверху",
+		Duration = 5,
+	})
+end)
+
+task.spawn(function()
+	local ok, err = xpcall(main, function(exception)
+		return tostring(exception) .. "\n" .. debug.traceback("", 2)
+	end)
+
+	if not ok then
+		addLog("ОШИБКА: " .. tostring(err):sub(1, 220))
+		setStatus("Ошибка — смотри лог")
+		if rconsoleprint then
+			pcall(rconsoleprint, tostring(err) .. "\n")
+		end
+	end
+end)
