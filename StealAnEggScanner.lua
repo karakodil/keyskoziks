@@ -75,7 +75,7 @@ local CONFIG = {
 	SERVERS_PER_PAGE  = 100,         -- лимит API
 	MAX_SERVER_PAGES  = 3,           -- сколько страниц серверов листать
 	MIN_FREE_SLOTS    = 1,           -- минимум свободных мест на целевом сервере
-	TELEPORT_COOLDOWN = 5,           -- антифлуд телепортов, сек
+	TELEPORT_COOLDOWN = 10,          -- антифлуд телепортов, сек
 
 	MAX_SCAN_OBJECTS  = 200000,      -- предохранитель от зависания на огромных картах
 	SCAN_REPLICATED   = false,       -- сканировать ещё и ReplicatedStorage
@@ -90,7 +90,7 @@ local CONFIG = {
 --=========================== СЛУЖБЫ И ХЕЛПЕРЫ ===============================--
 
 local PREFIX  = "[EggScanner]"
-local VERSION = "v3-mobile"
+local VERSION = "v4-recon"
 
 local Players           = game:GetService("Players")
 local TeleportService   = game:GetService("TeleportService")
@@ -281,8 +281,8 @@ local function getServers(maxPages)
 	return servers
 end
 
--- Случайный сервер, где есть свободные места и это не наш текущий сервер
-local function pickServer(servers)
+-- Список подходящих серверов в случайном порядке
+local function buildCandidates(servers)
 	local candidates = {}
 
 	for _, server in ipairs(servers) do
@@ -299,11 +299,22 @@ local function pickServer(servers)
 		end
 	end
 
+	-- перемешиваем
+	for index = #candidates, 2, -1 do
+		local swap = math.random(1, index)
+		candidates[index], candidates[swap] = candidates[swap], candidates[index]
+	end
+
+	return candidates
+end
+
+-- Случайный сервер, где есть свободные места и это не наш текущий сервер
+local function pickServer(servers)
+	local candidates = buildCandidates(servers)
 	if #candidates == 0 then
 		return nil
 	end
-
-	return candidates[math.random(1, #candidates)]
+	return candidates[1]
 end
 
 -- Автоперезапуск скрипта после телепорта (нужен CONFIG.SCRIPT_URL)
@@ -342,52 +353,58 @@ local function hopServer(reason)
 
 	local jobBefore = game.JobId
 
-	log("Ищу сервер для хопа (" .. tostring(reason) .. ")")
+	log("Хоп (" .. tostring(reason) .. "): получаю список серверов")
 	local servers = getServers()
-	local target  = pickServer(servers)
+	local candidates = buildCandidates(servers)
 
-	if target then
-		log(string.format(
-			"Цель: %s (свободно %d, ping %d). Всего серверов в списке: %d",
-			target.id, target.free, target.ping, #servers
-		))
-	else
-		log("Подходящих серверов не найдено — пробую Teleport() по PlaceId")
+	log(string.format("Серверов в API: %d, подходящих: %d", #servers, #candidates))
+
+	if #candidates == 0 then
+		log("Подходящих нет — Teleport() (может вернуть на тот же сервер)")
+		local ok = pcall(function()
+			TeleportService:Teleport(CONFIG.PLACE_ID, LocalPlayer)
+		end)
+		return ok
 	end
 
 	queueReload()
 
-	-- 1) Телепорт на конкретный JobId
-	if target then
+	-- Пробуем до 3 разных JobId: если один не сработал, не возвращаемся на свой
+	for index = 1, math.min(3, #candidates) do
+		local target = candidates[index]
+		log(string.format("Попытка %d: %s (свободно %d)",
+			index, tostring(target.id):sub(1, 8), target.free))
+
 		local ok, err = pcall(function()
 			TeleportService:TeleportToPlaceInstance(CONFIG.PLACE_ID, target.id, LocalPlayer)
 		end)
 
+		if not ok then
+			-- часть исполнителей не принимает третий аргумент
+			ok, err = pcall(function()
+				TeleportService:TeleportToPlaceInstance(CONFIG.PLACE_ID, target.id)
+			end)
+		end
+
 		if ok then
-			-- Если телепорт реально начался, клиент перезайдёт и эта строка
-			-- уже не выполнится. Если выполнилась — проверяем JobId.
-			task.wait(3)
+			-- если телепорт реально начался, клиент перезайдёт и код ниже не выполнится
+			task.wait(4)
 			if game.JobId ~= jobBefore then
 				return true
 			end
-			warn(PREFIX, "Телепорт на JobId не подтвердился, пробую резервный вариант")
+			log("телепорт не состоялся (JobId тот же)")
 		else
-			warn(PREFIX, "TeleportToPlaceInstance: " .. tostring(err))
+			log("ошибка: " .. tostring(err):sub(1, 70))
 		end
+
+		task.wait(2)
 	end
 
-	-- 2) Резерв: обычный телепорт на любую инстанцию плейса
-	local ok, err = pcall(function()
+	log("Все JobId не сработали — Teleport()")
+	local ok = pcall(function()
 		TeleportService:Teleport(CONFIG.PLACE_ID, LocalPlayer)
 	end)
-
-	if ok then
-		log("Хоп через Teleport() выполнен")
-		return true
-	end
-
-	warn(PREFIX, "Teleport(): " .. tostring(err))
-	return false
+	return ok
 end
 
 --============================= СКАНИРОВАНИЕ =================================--
@@ -854,78 +871,235 @@ local function makeButton(parent, caption, x, callback)
 	return button
 end
 
--- Диагностика: имена числовых атрибутов по всей карте + данные яиц
-local function collectDiagnostics(limit)
-	local lines = {}
-	local eggCount, withAttrs, scanned = 0, 0, 0
-	local attributeSummary = {} -- имя атрибута -> { count, max }
+--============================= РАЗВЕДКА КАРТЫ ===============================--
+
+local function shortPath(instance, limit)
+	limit = limit or 60
+	local ok, path = pcall(function()
+		return instance:GetFullName()
+	end)
+	if not ok or type(path) ~= "string" then
+		path = tostring(instance)
+	end
+	if #path > limit then
+		path = "..." .. path:sub(-(limit - 3))
+	end
+	return path
+end
+
+-- Держим в списке только N самых больших значений
+local function pushTop(list, item, limit, isBetter)
+	local size = #list + 1
+	list[size] = item
+
+	while size > 1 and isBetter(list[size], list[size - 1]) do
+		list[size], list[size - 1] = list[size - 1], list[size]
+		size = size - 1
+	end
+
+	while #list > limit do
+		table.remove(list)
+	end
+end
+
+-- Discord режет сообщения по 2000 символов
+local function splitMessage(text, limit)
+	limit = limit or 1800
+	local parts, buffer = {}, ""
+
+	for line in (text .. "\n"):gmatch("(.-)\n") do
+		if #buffer + #line + 1 > limit then
+			parts[#parts + 1] = buffer
+			buffer = ""
+		end
+		buffer = buffer .. line .. "\n"
+	end
+
+	if buffer ~= "" then
+		parts[#parts + 1] = buffer
+	end
+
+	return parts
+end
+
+local function sendDiscordMessage(content)
+	if CONFIG.WEBHOOK_URL == "" then
+		return false
+	end
+
+	local requestFn = getRequestFunction()
+	if not requestFn then
+		return false
+	end
+
+	local body = HttpService:JSONEncode({
+		username = "Egg Scanner",
+		content = content,
+	})
+
+	for attempt = 1, 2 do
+		local ok, response = pcall(requestFn, {
+			Url = CONFIG.WEBHOOK_URL,
+			Method = "POST",
+			Headers = { ["Content-Type"] = "application/json" },
+			Body = body,
+		})
+
+		if not ok then
+			return false
+		end
+
+		local status = normalizeResponse(response)
+		if status == 204 or status == 200 then
+			return true
+		end
+
+		if status ~= 429 then
+			return false
+		end
+
+		task.wait(2)
+	end
+
+	return false
+end
+
+--[[
+	Разведка карты: где вообще лежат данные о яйцах.
+	  - имена объектов с "egg" (сколько, есть ли статы, пример пути);
+	  - числовые атрибуты (имя, максимум, пример пути);
+	  - топ ValueBase (NumberValue/IntValue/StringValue) по значению;
+	  - топ TextLabel с крупными числами (цены в UI);
+	  - объекты с income/value/price/worth/cost в имени;
+	  - содержимое ReplicatedStorage;
+	  - RemoteEvent / RemoteFunction.
+]]
+local function collectRecon()
+	local scanned, truncated = 0, false
+	local eggNames, attrStats = {}, {}
+	local topValues, topLabels, nameHits = {}, {}, {}
+	local remotes, labelCount = {}, 0
+
 	local stack = { workspace }
+	if ReplicatedStorage then
+		stack[#stack + 1] = ReplicatedStorage
+	end
+
+	local function markEgg(instance, attributes)
+		local key = instance.Name:lower()
+		local entry = eggNames[key]
+
+		if not entry then
+			entry = { count = 0, stats = false, sample = instance, name = instance.Name }
+			eggNames[key] = entry
+		end
+
+		entry.count = entry.count + 1
+		if entry.stats then
+			return
+		end
+
+		-- есть ли у яйца хоть какие-то числовые данные
+		if attributes then
+			for _, value in pairs(attributes) do
+				local number = parseNumber(value)
+				if number and number > 0 then
+					entry.stats = true
+					return
+				end
+			end
+		end
+
+		for _, child in ipairs(instance:GetChildren()) do
+			if child:IsA("ValueBase") then
+				local number = parseNumber(child.Value)
+				if number and number > 0 then
+					entry.stats = true
+					return
+				end
+			end
+		end
+	end
 
 	while #stack > 0 do
 		local instance = table.remove(stack)
 		scanned = scanned + 1
 
 		if scanned > CONFIG.MAX_SCAN_OBJECTS then
+			truncated = true
 			break
 		end
 
-		-- сводку собираем только по первым 40к объектам, чтобы не тормозило
 		local attributes = nil
-		if scanned <= 40000 then
-			local okAttrs, result = pcall(function()
-				return instance:GetAttributes()
-			end)
-			if okAttrs and type(result) == "table" then
-				attributes = result
-				for name, value in pairs(attributes) do
-					local number = parseNumber(value)
-					if number and number > 0 then
-						local entry = attributeSummary[name]
-						if not entry then
-							entry = { count = 0, max = number }
-							attributeSummary[name] = entry
-						end
-						entry.count = entry.count + 1
-						if number > entry.max then
-							entry.max = number
-						end
+		local okAttrs, result = pcall(function()
+			return instance:GetAttributes()
+		end)
+		if okAttrs and type(result) == "table" then
+			attributes = result
+		end
+
+		if attributes then
+			for name, value in pairs(attributes) do
+				local number = parseNumber(value)
+				if number and number > 0 then
+					local entry = attrStats[name]
+					if not entry then
+						entry = { count = 0, max = number, sample = instance }
+						attrStats[name] = entry
+					end
+					entry.count = entry.count + 1
+					if number > entry.max then
+						entry.max = number
+						entry.sample = instance
 					end
 				end
 			end
 		end
 
-		if instance ~= workspace and instance.Parent ~= nil
-			and isEggName(instance.Name) and not instance:IsA("Folder") then
-			eggCount = eggCount + 1
+		local className = instance.ClassName
 
-			if #lines < limit then
-				local parts = {}
-				if attributes then
-					for name, value in pairs(attributes) do
-						parts[#parts + 1] = tostring(name) .. "=" .. tostring(value)
-					end
-				end
+		if isEggName(instance.Name) and not instance:IsA("Folder") then
+			markEgg(instance, attributes)
+		end
 
-				for _, child in ipairs(instance:GetChildren()) do
-					if child:IsA("ValueBase") then
-						parts[#parts + 1] = child.Name .. "=" .. tostring(child.Value)
-					end
-				end
-
-				if #parts > 0 then
-					withAttrs = withAttrs + 1
-				end
-
-				local text = table.concat(parts, ", ")
-				if #text > 40 then
-					text = text:sub(1, 40) .. "..."
-				end
-				if text == "" then
-					text = "нет атрибутов"
-				end
-
-				lines[#lines + 1] = instance.Name:sub(1, 14) .. ": " .. text
+		if className == "NumberValue" or className == "IntValue" or className == "StringValue" then
+			local number = parseNumber(instance.Value)
+			if number and number > 0 then
+				pushTop(topValues, {
+					instance = instance,
+					value = number,
+					className = className,
+				}, 10, function(a, b)
+					return a.value > b.value
+				end)
 			end
+		elseif className == "TextLabel" or className == "TextButton" then
+			if labelCount < 3000 then
+				labelCount = labelCount + 1
+				local number = parseNumber(instance.Text)
+				if number and number >= 1e6 then
+					pushTop(topLabels, {
+						instance = instance,
+						text = tostring(instance.Text),
+						number = number,
+					}, 8, function(a, b)
+						return a.number > b.number
+					end)
+				end
+			end
+		elseif className == "RemoteEvent" or className == "RemoteFunction" then
+			if #remotes < 20 then
+				remotes[#remotes + 1] = instance.Name .. " (" .. className .. ")"
+			end
+		end
+
+		local lowerName = instance.Name:lower()
+		if #nameHits < 15 and (lowerName:find("income", 1, true)
+			or lowerName:find("value", 1, true)
+			or lowerName:find("price", 1, true)
+			or lowerName:find("worth", 1, true)
+			or lowerName:find("cost", 1, true)) then
+			nameHits[#nameHits + 1] = { instance = instance, className = className }
 		end
 
 		for _, child in ipairs(instance:GetChildren()) do
@@ -937,19 +1111,129 @@ local function collectDiagnostics(limit)
 		end
 	end
 
-	-- самые «дорогие» числовые атрибуты первыми
-	local summary = {}
-	for name, entry in pairs(attributeSummary) do
-		summary[#summary + 1] = { name = name, count = entry.count, max = entry.max }
+	-- сортируем по «весу»
+	local eggList = {}
+	for name, info in pairs(eggNames) do
+		eggList[#eggList + 1] = {
+			name = info.name or name,
+			count = info.count,
+			stats = info.stats,
+			sample = info.sample,
+		}
 	end
-	table.sort(summary, function(a, b)
+	table.sort(eggList, function(a, b)
+		return a.count > b.count
+	end)
+
+	local attrList = {}
+	for name, info in pairs(attrStats) do
+		attrList[#attrList + 1] = {
+			name = name,
+			count = info.count,
+			max = info.max,
+			sample = info.sample,
+		}
+	end
+	table.sort(attrList, function(a, b)
 		if a.max ~= b.max then
 			return a.max > b.max
 		end
 		return a.count > b.count
 	end)
 
-	return lines, eggCount, withAttrs, scanned, summary
+	local lines = {}
+	local function add(...)
+		lines[#lines + 1] = string.format(...)
+	end
+
+	add("RECON %s | Job %s | объектов %d%s",
+		VERSION, tostring(game.JobId):sub(1, 8), scanned, truncated and " (лимит)" or "")
+	add("")
+
+	add("[EGG-имена] уникальных: %d", #eggList)
+	for index = 1, math.min(8, #eggList) do
+		local entry = eggList[index]
+		add("%s x%d | статы: %s | %s",
+			entry.name, entry.count, entry.stats and "да" or "нет",
+			shortPath(entry.sample, 55))
+	end
+	if #eggList == 0 then
+		add("нет имён с egg")
+	end
+	add("")
+
+	add("[ЧИСЛОВЫЕ АТРИБУТЫ] уникальных: %d", #attrList)
+	for index = 1, math.min(8, #attrList) do
+		local entry = attrList[index]
+		add("%s x%d = %s | %s",
+			entry.name, entry.count, formatNumber(entry.max),
+			shortPath(entry.sample, 50))
+	end
+	if #attrList == 0 then
+		add("нет")
+	end
+	add("")
+
+	add("[ValueBase топ-%d]", #topValues)
+	for _, item in ipairs(topValues) do
+		add("%s (%s) = %s", shortPath(item.instance, 50), item.className, formatNumber(item.value))
+	end
+	if #topValues == 0 then
+		add("нет")
+	end
+	add("")
+
+	add("[Текст с числами топ-%d]", #topLabels)
+	for _, item in ipairs(topLabels) do
+		add("%s = %s", shortPath(item.instance, 45), tostring(item.text):sub(1, 24))
+	end
+	if #topLabels == 0 then
+		add("нет")
+	end
+	add("")
+
+	add("[Имена со value/price/worth/cost]")
+	for _, item in ipairs(nameHits) do
+		add("%s (%s)", shortPath(item.instance, 55), item.className)
+	end
+	if #nameHits == 0 then
+		add("нет")
+	end
+	add("")
+
+	if ReplicatedStorage then
+		add("[ReplicatedStorage]")
+		local children = ReplicatedStorage:GetChildren()
+		for index = 1, math.min(25, #children) do
+			local child = children[index]
+			add("%s (%s)", tostring(child.Name):sub(1, 40), child.ClassName)
+			if child:IsA("Folder") then
+				local inner = child:GetChildren()
+				for innerIndex = 1, math.min(5, #inner) do
+					add("  %s (%s)", tostring(inner[innerIndex].Name):sub(1, 34), inner[innerIndex].ClassName)
+				end
+			end
+		end
+		if #children == 0 then
+			add("пусто")
+		end
+		add("")
+	end
+
+	add("[Remote-объекты]")
+	for _, item in ipairs(remotes) do
+		add(item)
+	end
+	if #remotes == 0 then
+		add("нет")
+	end
+
+	local text = table.concat(lines, "\n")
+	if #text > 12000 then
+		text = text:sub(1, 12000) .. "\n... (обрезано)"
+	end
+
+	return text, scanned, #eggList
 end
 
 local function createStatusGui()
@@ -1266,31 +1550,41 @@ UI.actions.hop = function()
 end
 
 UI.actions.dump = function()
-	setStatus("Дамп атрибутов...")
-	local lines, eggCount, withAttrs, scanned, summary = collectDiagnostics(3)
+	setStatus("Разведка карты...")
+	addLog("Собираю разведку (может занять 10-30 сек)...")
+
+	local text, scanned, uniqueEggNames = collectRecon()
 
 	addLog(string.format(
-		"Дамп: объектов %d, с egg %d, с данными %d",
-		scanned, eggCount, withAttrs
+		"Разведка: объектов %d, уникальных egg-имён %d",
+		scanned, uniqueEggNames
 	))
 
-	if #summary == 0 then
-		addLog("Числовых атрибутов в workspace нет вообще")
-	else
-		for index = 1, math.min(4, #summary) do
-			local entry = summary[index]
-			addLog(string.format(
-				"атр %s x%d = %s",
-				entry.name, entry.count, formatNumber(entry.max)
-			))
+	-- файл, если исполнитель умеет
+	if writefile then
+		pcall(writefile, "egg_recon.txt", text)
+	end
+
+	local parts = splitMessage(text)
+	local sentCount = 0
+
+	for index = 1, math.min(#parts, 6) do
+		if sendDiscordMessage(parts[index]) then
+			sentCount = sentCount + 1
 		end
+		task.wait(1)
 	end
 
-	for _, line in ipairs(lines) do
-		addLog(line)
+	if sentCount > 0 then
+		addLog(string.format("Разведка отправлена в Discord: %d сообщ.", sentCount))
+		setStatus("Разведка в Discord")
+	else
+		-- хотя бы первые строки на экран
+		for line in text:gmatch("[^\n]+") do
+			addLog(line:sub(1, 60))
+		end
+		setStatus("Discord недоступен — лог на экране")
 	end
-
-	setStatus("Дамп готов — смотри лог")
 end
 
 UI.actions.stop = function()
@@ -1320,7 +1614,7 @@ if isTest then
 		getServers   = getServers,
 		hopServer    = hopServer,
 		sendWebhook  = sendWebhook,
-		collectDiagnostics = collectDiagnostics,
+		collectRecon = collectRecon,
 	}
 	return
 end
