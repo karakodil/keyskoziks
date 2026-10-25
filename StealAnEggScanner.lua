@@ -90,7 +90,7 @@ local CONFIG = {
 --=========================== СЛУЖБЫ И ХЕЛПЕРЫ ===============================--
 
 local PREFIX  = "[EggScanner]"
-local VERSION = "v6-biomes"
+local VERSION = "v7-paste"
 
 local Players           = game:GetService("Players")
 local TeleportService   = game:GetService("TeleportService")
@@ -119,6 +119,8 @@ end
 
 -- Экранный лог (на телефоне консоль недоступна), назначается в блоке GUI
 local pushLog = nil
+local addLog      -- назначается в блоке GUI
+local setStatus   -- назначается в блоке GUI
 
 -- Перехватываем warn, чтобы предупреждения тоже были видны на экране
 local rawWarn = warn
@@ -912,7 +914,7 @@ local function refreshLog()
 	end)
 end
 
-local function addLog(text)
+function addLog(text)
 	text = tostring(text)
 	logLines[#logLines + 1] = text
 	while #logLines > LOG_LINES_MAX do
@@ -926,7 +928,7 @@ end
 
 pushLog = addLog
 
-local function setStatus(text)
+function setStatus(text)
 	if not UI.status then
 		return
 	end
@@ -1053,6 +1055,100 @@ local function sendDiscordMessage(content)
 	end
 
 	return false
+end
+
+-- Заливаем текст на пастбин, чтобы не копировать простыню с телефона
+local function uploadText(text)
+	local requestFn = getRequestFunction()
+	if not requestFn then
+		return nil, "нет request"
+	end
+
+	-- 1) paste.rs: тело запроса = сам текст, ответ = ссылка
+	local ok, response = pcall(requestFn, {
+		Url = "https://paste.rs",
+		Method = "POST",
+		Headers = { ["Content-Type"] = "text/plain" },
+		Body = text,
+	})
+
+	if ok then
+		local status, body = normalizeResponse(response)
+		if status == 200 or status == 201 then
+			local link = tostring(body or ""):match("https://paste%.rs/%S+")
+			if link then
+				return link
+			end
+		end
+	end
+
+	-- 2) tmpfiles.org (multipart), ответ — JSON с url
+	local boundary = "----EggScanner" .. tostring(math.random(100000, 999999))
+	local body = table.concat({
+		"--" .. boundary,
+		'Content-Disposition: form-data; name="file"; filename="recon.txt"',
+		"Content-Type: text/plain",
+		"",
+		text,
+		"--" .. boundary .. "--",
+		"",
+	}, "\r\n")
+
+	local ok2, response2 = pcall(requestFn, {
+		Url = "https://tmpfiles.org/api/v1/upload",
+		Method = "POST",
+		Headers = { ["Content-Type"] = "multipart/form-data; boundary=" .. boundary },
+		Body = body,
+	})
+
+	if ok2 then
+		local status2, body2 = normalizeResponse(response2)
+		if status2 == 200 and type(body2) == "string" then
+			local url = body2:match('"url"%s*:%s*"([^"]+)"')
+			if url then
+				return (url:gsub("tmpfiles%.org/", "tmpfiles.org/dl/"))
+			end
+		end
+	end
+
+	return nil, "пастбины недоступны"
+end
+
+-- Отчёт: сначала пробуем ссылку, иначе режем на сообщения Discord
+local function deliverReport(text, title)
+	local link = uploadText(text)
+
+	if link then
+		addLog(title .. ": " .. link)
+		setStatus(title .. " готов")
+		if setclipboard then
+			pcall(setclipboard, link)
+		end
+		sendDiscordMessage(string.format("**%s** (%d симв.)\n%s", title, #text, link))
+		return link
+	end
+
+	local parts = splitMessage(text)
+	local sent = 0
+
+	for index = 1, math.min(#parts, 6) do
+		if sendDiscordMessage(parts[index]) then
+			sent = sent + 1
+		end
+		task.wait(1)
+	end
+
+	if sent > 0 then
+		addLog(string.format("%s: отправлено в Discord %d сообщ.", title, sent))
+		setStatus(title .. " в Discord")
+		return nil
+	end
+
+	for line in text:gmatch("[^\n]+") do
+		addLog(line:sub(1, 60))
+	end
+	setStatus("Нет связи — лог на экране")
+	return nil
 end
 
 --[[
@@ -1914,73 +2010,32 @@ end
 
 UI.actions.dump = function()
 	setStatus("Разведка карты...")
-	addLog("Собираю разведку (может занять 10-30 сек)...")
+	addLog("Собираю разведку (10-30 сек)...")
 
 	local text, scanned, uniqueEggNames = collectRecon()
 
-	addLog(string.format(
-		"Разведка: объектов %d, уникальных egg-имён %d",
-		scanned, uniqueEggNames
-	))
+	addLog(string.format("Разведка: объектов %d, egg-имён %d", scanned, uniqueEggNames))
 
-	-- файл, если исполнитель умеет
 	if writefile then
 		pcall(writefile, "egg_recon.txt", text)
 	end
 
-	local parts = splitMessage(text)
-	local sentCount = 0
-
-	for index = 1, math.min(#parts, 6) do
-		if sendDiscordMessage(parts[index]) then
-			sentCount = sentCount + 1
-		end
-		task.wait(1)
-	end
-
-	if sentCount > 0 then
-		addLog(string.format("Разведка отправлена в Discord: %d сообщ.", sentCount))
-		setStatus("Разведка в Discord")
-	else
-		-- хотя бы первые строки на экран
-		for line in text:gmatch("[^\n]+") do
-			addLog(line:sub(1, 60))
-		end
-		setStatus("Discord недоступен — лог на экране")
-	end
+	deliverReport(text, "RECON")
 end
 
 UI.actions.egg = function()
 	setStatus("Инспектор яйца...")
-	addLog("Разбираю яйцо и конфиг-модули...")
+	addLog("Разбираю яйцо и модули Data...")
 
 	local text, samples = collectEggInspect()
 
-	addLog(string.format("Инспектор: образцов яиц %d", samples))
+	addLog(string.format("Инспектор: образцов %d", samples))
 
 	if writefile then
 		pcall(writefile, "egg_inspect.txt", text)
 	end
 
-	local parts = splitMessage(text)
-	local sent = 0
-
-	for index = 1, math.min(#parts, 6) do
-		if sendDiscordMessage(parts[index]) then
-			sent = sent + 1
-		end
-		task.wait(1)
-	end
-
-	if sent > 0 then
-		addLog(string.format("Инспектор отправлен в Discord: %d сообщ.", sent))
-		setStatus("Инспектор в Discord")
-	else
-		for line in text:gmatch("[^\n]+") do
-			addLog(line:sub(1, 60))
-		end
-		setStatus("Discord недоступен — лог на экране")
-	end
+	deliverReport(text, "EGG INSPECT")
 end
 
 UI.actions.stop = function()
@@ -2012,6 +2067,8 @@ if isTest then
 		sendWebhook  = sendWebhook,
 		collectRecon = collectRecon,
 		collectEggInspect = collectEggInspect,
+		uploadText   = uploadText,
+		deliverReport = deliverReport,
 	}
 	return
 end
