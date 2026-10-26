@@ -95,7 +95,7 @@ local CONFIG = {
 --=========================== СЛУЖБЫ И ХЕЛПЕРЫ ===============================--
 
 local PREFIX  = "[EggScanner]"
-local VERSION = "v24-slots2"
+local VERSION = "v25-zone"
 
 local Players           = game:GetService("Players")
 local TeleportService   = game:GetService("TeleportService")
@@ -703,6 +703,69 @@ local function isEggLike(instance)
 	return false
 end
 
+-- Позиция зоны: EggPoint или любая часть внутри
+local function areaPosition(area)
+	local guard = area:FindFirstChild("Guard")
+	local eggPoint = guard and guard:FindFirstChild("EggPoint")
+	if eggPoint and eggPoint:IsA("BasePart") then
+		return eggPoint.Position
+	end
+
+	for _, descendant in ipairs(area:GetDescendants()) do
+		if descendant:IsA("BasePart") then
+			return descendant.Position
+		end
+	end
+
+	return nil
+end
+
+local areaPositionsCache = nil
+
+local function getAreaPositions()
+	if areaPositionsCache then
+		return areaPositionsCache
+	end
+
+	local list = {}
+	local world = workspace:FindFirstChild("World")
+	local areasFolder = world and world:FindFirstChild("Areas")
+	local guardAreas = areasFolder and areasFolder:FindFirstChild("GuardAreas")
+
+	if guardAreas then
+		for _, area in ipairs(guardAreas:GetChildren()) do
+			local position = areaPosition(area)
+			if position then
+				list[#list + 1] = { name = tostring(area.Name), position = position }
+			end
+		end
+	end
+
+	areaPositionsCache = list
+	return list
+end
+
+local function nearestAreaName(instance)
+	local ok, position = pcall(function()
+		return instance.Position
+	end)
+	if not ok or position == nil then
+		return nil
+	end
+
+	local bestName, bestDistance = nil, math.huge
+	for _, entry in ipairs(getAreaPositions()) do
+		local okDistance, distance = pcall(function()
+			return (entry.position - position).Magnitude
+		end)
+		if okDistance and type(distance) == "number" and distance < bestDistance then
+			bestName, bestDistance = entry.name, distance
+		end
+	end
+
+	return bestName
+end
+
 local areaNameCache = nil
 
 local function getAreaNames()
@@ -787,6 +850,11 @@ local function getBiomeName(instance)
 				return matched or value
 			end
 		end
+	end
+
+	local nearest = nearestAreaName(instance)
+	if nearest then
+		return nearest
 	end
 
 	if eggContainerName then
