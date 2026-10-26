@@ -99,7 +99,7 @@ local CONFIG = {
 --=========================== СЛУЖБЫ И ХЕЛПЕРЫ ===============================--
 
 local PREFIX  = "[EggScanner]"
-local VERSION = "v44-eggsource"
+local VERSION = "v45-blob"
 
 local Players           = game:GetService("Players")
 local TeleportService   = game:GetService("TeleportService")
@@ -985,6 +985,7 @@ end
 
 -- Индекс питомцев без пробелов/знаков: "PetalBeetle" == "Petal Beetle"
 local petIndexCache = nil
+local petOriginalKeys = {}
 
 function normalizeKey(text)
 	return (string.lower(tostring(text)):gsub("[^%w]", ""))
@@ -999,6 +1000,7 @@ function getPetIndex()
 	local assets = requireModule and requireModule("Assets")
 	if type(assets) == "table" and type(assets.Directory) == "table" then
 		for key, value in pairs(assets.Directory) do
+			petOriginalKeys[normalizeKey(key)] = tostring(key)
 			index[normalizeKey(key)] = value
 			if type(value) == "table" and type(value.DisplayName) == "string" then
 				index[normalizeKey(value.DisplayName)] = value
@@ -1099,6 +1101,85 @@ function insidePlacedRenders(instance)
 	return false
 end
 
+-- Собираем "blob" текста: имя, родители, атрибуты, тексты и имена детей
+local function buildEggBlob(instance)
+	local parts = { instance.Name }
+
+	local node = instance.Parent
+	for _ = 1, 3 do
+		if not node or node == workspace then
+			break
+		end
+		parts[#parts + 1] = node.Name
+		node = node.Parent
+	end
+
+	local okAttributes, attributes = pcall(function()
+		return instance:GetAttributes()
+	end)
+	if okAttributes and type(attributes) == "table" then
+		for name, value in pairs(attributes) do
+			parts[#parts + 1] = tostring(name) .. "=" .. tostring(value)
+		end
+	end
+
+	local okDescendants, descendants = pcall(function()
+		return instance:GetDescendants()
+	end)
+	if okDescendants and type(descendants) == "table" then
+		for index, descendant in ipairs(descendants) do
+			if index > 120 then
+				break
+			end
+
+			if descendant:IsA("TextLabel") or descendant:IsA("TextBox") then
+				parts[#parts + 1] = tostring(descendant.Text)
+			elseif descendant:IsA("StringValue") then
+				parts[#parts + 1] = descendant.Name .. "=" .. tostring(descendant.Value)
+			elseif descendant:IsA("NumberValue") or descendant:IsA("IntValue") then
+				parts[#parts + 1] = descendant.Name .. "=" .. tostring(descendant.Value)
+			else
+				parts[#parts + 1] = descendant.Name
+			end
+		end
+	end
+
+	return table.concat(parts, " ")
+end
+
+-- ключи питомцев, длинные сначала
+local petKeyList = nil
+
+local function getPetKeyList()
+	if petKeyList then
+		return petKeyList
+	end
+
+	local keys = {}
+	for key in pairs(getPetIndex()) do
+		if #key >= 4 then
+			keys[#keys + 1] = key
+		end
+	end
+	table.sort(keys, function(a, b)
+		return #a > #b
+	end)
+
+	petKeyList = keys
+	return keys
+end
+
+-- ищем имя пета в blob (как в рабочем скрипте)
+local function findPetInBlob(blob)
+	local compact = normalizeKey(blob)
+	for _, key in ipairs(getPetKeyList()) do
+		if string.find(compact, key, 1, true) then
+			return key
+		end
+	end
+	return nil
+end
+
 -- Собираем всё про яйцо: атрибуты, UID, биом, питомца и его доход
 local function buildEggEntry(instance)
 	-- контейнеры (EggPoint, EggSpawn...) не считаем яйцом, иначе не зайдём внутрь
@@ -1120,6 +1201,18 @@ local function buildEggEntry(instance)
 		if petConfig then
 			pet = (type(petConfig) == "table" and petConfig.DisplayName) or instance.Name
 			source = "name"
+		end
+	end
+
+	-- имя пета может быть только в имени/тексте детей (как в рабочем скрипте)
+	if not pet then
+		local blobKey = findPetInBlob(buildEggBlob(instance))
+		if blobKey then
+			local config = getPetIndex()[blobKey]
+			pet = (type(config) == "table" and config.DisplayName)
+				 or petOriginalKeys[blobKey] or blobKey
+			petConfig = config
+			source = source or "blob"
 		end
 	end
 

@@ -80,6 +80,9 @@ local slotEgg2 = addChild(slotsClient, newInstance("Model", "slot2"))
 local slotEgg2Child = addChild(slotEgg2, newInstance("Part", "Decal"))
 slotEgg2Child:SetAttribute("EggSource", "Holy Peacock Egg")
 
+local slot3 = addChild(slotsClient, newInstance("Model", "slot3"))
+addChild(slot3, newInstance("MeshPart", "HolyPeacockMesh"))
+
 local placed = addChild(ws, newInstance("Folder", "PlacedEggRenders"))
 local placedEgg = addChild(placed, newInstance("Model", "8301557848_deadbeef"))
 placedEgg:SetAttribute("PreparedSourceName", "Dread Wolf")
@@ -199,7 +202,7 @@ assert(API, "API not exported")
 
 --============================ тесты =======================================--
 print("== версия ==")
-check(API.VERSION == "v44-eggsource", "версия v44-eggsource (получено " .. tostring(API.VERSION) .. ")")
+check(API.VERSION == "v45-blob", "версия v45-blob (получено " .. tostring(API.VERSION) .. ")")
 
 print("== формат чисел ==")
 check(API.formatNumber(25600000) == "25.6M", "25.6M -> " .. API.formatNumber(25600000))
@@ -229,6 +232,8 @@ check(byName["HolyPeacock"] and byName["HolyPeacock"].income == 273000000, "до
 check(byName["HolyPeacock"] and byName["HolyPeacock"].biome == "Cherry Blossom", "биом Cherry Blossom по пути")
 check(byName["slot2"] and byName["slot2"].pet == "Holy Peacock", "EggSource на ребёнке слота: " .. tostring(byName["slot2"] and byName["slot2"].pet))
 check(byName["slot2"] and byName["slot2"].income == 273000000, "доход из EggSource: " .. tostring(byName["slot2"] and byName["slot2"].income))
+check(byName["slot3"] and byName["slot3"].pet == "Holy Peacock", "пет из имени ребёнка (blob): " .. tostring(byName["slot3"] and byName["slot3"].pet))
+check(byName["slot3"] and byName["slot3"].income == 273000000, "доход из blob-пета: " .. tostring(byName["slot3"] and byName["slot3"].income))
 check(byName["slot1"] and byName["slot1"].placed == false, "яйцо в мире не помечено placed")
 
 print("== инспектор ==")
