@@ -94,7 +94,7 @@ local CONFIG = {
 --=========================== СЛУЖБЫ И ХЕЛПЕРЫ ===============================--
 
 local PREFIX  = "[EggScanner]"
-local VERSION = "v20-attrs"
+local VERSION = "v21-noplots"
 
 local Players           = game:GetService("Players")
 local TeleportService   = game:GetService("TeleportService")
@@ -603,11 +603,19 @@ end
 	Так отсекаются витрины/пьюты с питомцами, из-за которых раньше
 	в топ попадали объекты вида 11654316434_8f699e...
 ]]
--- Эвентовые миры (HalloweenDimension и т.п.) — не трогаем
+-- Миры/папки, которые не сканируем: эвенты, базы игроков, клиентские ассеты
+local IGNORE_WORLDS = {
+	"dimension", "halloween", "plots", "clientrenderedassets",
+}
+
 local function isEventWorld(instance)
 	local lower = string.lower(tostring(instance.Name))
-	return string.find(lower, "dimension", 1, true) ~= nil
-		or string.find(lower, "halloween", 1, true) ~= nil
+	for _, word in ipairs(IGNORE_WORLDS) do
+		if string.find(lower, word, 1, true) then
+			return true
+		end
+	end
+	return false
 end
 
 local function insideEventWorld(instance)
@@ -654,7 +662,6 @@ local function isEggLike(instance)
 
 			if string.find(key, "canpickup", 1, true)
 				or string.find(key, "preparedsource", 1, true)
-				or key == "sourcename"
 				or (string.find(key, "egg", 1, true) and string.find(key, "uid", 1, true)) then
 				return true
 			end
