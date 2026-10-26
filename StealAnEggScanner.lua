@@ -99,7 +99,7 @@ local CONFIG = {
 --=========================== СЛУЖБЫ И ХЕЛПЕРЫ ===============================--
 
 local PREFIX  = "[EggScanner]"
-local VERSION = "v49-zones"
+local VERSION = "v50-report"
 
 local Players           = game:GetService("Players")
 local TeleportService   = game:GetService("TeleportService")
@@ -3380,6 +3380,16 @@ local function collectEggInspect()
 
 	local eggs = collectEggs()
 	add("яиц найдено: %d", #eggs)
+	add("")
+
+	-- сначала самое важное: модули (EggCmds) и слоты
+	add("[МОДУЛИ]")
+	dumpModules(lines)
+	add("")
+
+	add("[СЛОТЫ]")
+	dumpSlots(lines)
+	add("")
 
 	-- по одному лучшему яйцу на питомца
 	local byPet = {}
@@ -3450,10 +3460,6 @@ local function collectEggInspect()
 	dumpNewEggs(lines)
 	add("")
 
-	add("[СЛОТЫ]")
-	dumpSlots(lines)
-	add("")
-
 	add("[AREA SLOTS]")
 	dumpAreaSlots(lines)
 	add("")
@@ -3478,10 +3484,6 @@ local function collectEggInspect()
 	dumpAttributes(lines, "workspace", workspace)
 	add("")
 
-	add("[МОДУЛИ]")
-	dumpModules(lines)
-	add("")
-
 	add("[CONFIG]")
 	dumpConfig(lines)
 	add("")
@@ -3490,8 +3492,8 @@ local function collectEggInspect()
 	dumpTrack(lines)
 
 	local text = table.concat(lines, "\n")
-	if #text > 20000 then
-		text = text:sub(1, 20000) .. "\n... (обрезано)"
+	if #text > 60000 then
+		text = text:sub(1, 60000) .. "\n... (обрезано)"
 	end
 
 	return text, #eggs
