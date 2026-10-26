@@ -90,7 +90,7 @@ local CONFIG = {
 --=========================== СЛУЖБЫ И ХЕЛПЕРЫ ===============================--
 
 local PREFIX  = "[EggScanner]"
-local VERSION = "v8-config"
+local VERSION = "v9-areas"
 
 local Players           = game:GetService("Players")
 local TeleportService   = game:GetService("TeleportService")
@@ -582,18 +582,31 @@ local function isEggLike(instance)
 	return false
 end
 
--- Биом: ближайший предок с "Dimension" в имени (EnchantedForestDimension и т.п.)
+-- Биом: либо <X>Dimension, либо Workspace.World.Areas.GuardAreas.<Area>
 local function getBiomeName(instance)
 	local node = instance.Parent
-	for _ = 1, 4 do
+	for _ = 1, 6 do
 		if not node or node == workspace then
 			break
 		end
-		if string.find(string.lower(node.Name), "dimension", 1, true) then
+
+		local lower = string.lower(tostring(node.Name))
+
+		if string.find(lower, "dimension", 1, true) then
 			return node.Name
 		end
+
+		local parent = node.Parent
+		if parent then
+			local parentName = string.lower(tostring(parent.Name))
+			if parentName == "guardareas" or parentName == "areas" then
+				return node.Name
+			end
+		end
+
 		node = node.Parent
 	end
+
 	return "?"
 end
 
