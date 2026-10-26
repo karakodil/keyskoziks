@@ -94,7 +94,7 @@ local CONFIG = {
 --=========================== СЛУЖБЫ И ХЕЛПЕРЫ ===============================--
 
 local PREFIX  = "[EggScanner]"
-local VERSION = "v19-slots"
+local VERSION = "v20-attrs"
 
 local Players           = game:GetService("Players")
 local TeleportService   = game:GetService("TeleportService")
@@ -644,13 +644,18 @@ local function isEggLike(instance)
 		return true
 	end
 
-	-- 2) переносимое яйцо
+	-- 2) атрибуты, по которым яйцо узнаётся в любой зоне
 	local ok, attributes = pcall(function()
 		return instance:GetAttributes()
 	end)
 	if ok and type(attributes) == "table" then
 		for name, value in pairs(attributes) do
-			if value == true and string.find(string.lower(tostring(name)), "canpickup", 1, true) then
+			local key = string.lower(tostring(name))
+
+			if string.find(key, "canpickup", 1, true)
+				or string.find(key, "preparedsource", 1, true)
+				or key == "sourcename"
+				or (string.find(key, "egg", 1, true) and string.find(key, "uid", 1, true)) then
 				return true
 			end
 		end
