@@ -92,6 +92,12 @@ local waterfalls = addChild(ws, newInstance("Folder", "Waterfalls"))
 local waterfallPart = addChild(waterfalls, newInstance("Part", "Part"))
 addChild(waterfallPart, newInstance("ParticleEmitter", "Koi"))
 
+local creatures = addChild(ws, newInstance("Folder", "Creatures"))
+local krakenArm = addChild(creatures, newInstance("Model", "Kraken Arm 07"))
+local krakenRoot = addChild(krakenArm, newInstance("Model", "Root"))
+local modelsForEgg = addChild(krakenRoot, newInstance("Model", "Models for egg.053"))
+addChild(modelsForEgg, newInstance("MeshPart", "Kraken"))
+
 local convert = addChild(ws, newInstance("Model", "Convert"))
 local aetheron = addChild(convert, newInstance("Model", "Aetheron"))
 aetheron:SetAttribute("PreparedSourceName", "Archangel")
@@ -202,7 +208,7 @@ assert(API, "API not exported")
 
 --============================ тесты =======================================--
 print("== версия ==")
-check(API.VERSION == "v45-blob", "версия v45-blob (получено " .. tostring(API.VERSION) .. ")")
+check(API.VERSION == "v46-nodecor", "версия v46-nodecor (получено " .. tostring(API.VERSION) .. ")")
 
 print("== формат чисел ==")
 check(API.formatNumber(25600000) == "25.6M", "25.6M -> " .. API.formatNumber(25600000))
@@ -225,6 +231,7 @@ check(names["8301557848_deadbeef"] == nil, "яйцо на базе (PlacedEggRen
 check(names["Koi"] == nil, "эмиттер Koi в водопаде НЕ считается яйцом")
 check(names["Aetheron"] == nil, "станция Convert НЕ считается яйцом")
 check(names["8687390958_10b4"] == nil, "питомец на базе НЕ считается яйцом")
+check(names["Models for egg.053"] == nil, "лапа кракена (Models for egg) НЕ считается яйцом")
 
 check(byName["slot1"] and byName["slot1"].pet == "SpiritPanda", "питомец из PreparedSourceName")
 check(byName["slot1"] and byName["slot1"].income == 90000000, "доход SpiritPanda 90M")

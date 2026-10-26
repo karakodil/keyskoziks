@@ -99,7 +99,7 @@ local CONFIG = {
 --=========================== СЛУЖБЫ И ХЕЛПЕРЫ ===============================--
 
 local PREFIX  = "[EggScanner]"
-local VERSION = "v45-blob"
+local VERSION = "v46-nodecor"
 
 local Players           = game:GetService("Players")
 local TeleportService   = game:GetService("TeleportService")
@@ -665,6 +665,20 @@ local function isEggLike(instance)
 		return false
 	end
 
+	-- лапы кракенов, "Models for egg.*" и прочий декор
+	local decorNode = instance
+	for _ = 1, 4 do
+		if not decorNode or decorNode == workspace then
+			break
+		end
+		local decorName = string.lower(tostring(decorNode.Name))
+		if string.find(decorName, "creatures", 1, true)
+			or string.find(decorName, "models for egg", 1, true) then
+			return false
+		end
+		decorNode = decorNode.Parent
+	end
+
 	-- 1) лежит в контейнере яиц на глубине до 3 уровней
 	local node = instance.Parent
 	for _ = 1, 3 do
@@ -1105,15 +1119,6 @@ end
 local function buildEggBlob(instance)
 	local parts = { instance.Name }
 
-	local node = instance.Parent
-	for _ = 1, 3 do
-		if not node or node == workspace then
-			break
-		end
-		parts[#parts + 1] = node.Name
-		node = node.Parent
-	end
-
 	local okAttributes, attributes = pcall(function()
 		return instance:GetAttributes()
 	end)
@@ -1169,6 +1174,25 @@ local function getPetKeyList()
 	return keys
 end
 
+-- родители: только точное совпадение (иначе "Kraken Arm 07" даёт Kraken)
+local function petFromParents(instance)
+	local node = instance.Parent
+	for _ = 1, 3 do
+		if not node or node == workspace then
+			break
+		end
+
+		local key = normalizeKey(node.Name)
+		key = key:gsub("egg$", ""):gsub("nest$", ""):gsub("model$", "")
+		if #key >= 4 and getPetIndex()[key] then
+			return key
+		end
+
+		node = node.Parent
+	end
+	return nil
+end
+
 -- ищем имя пета в blob (как в рабочем скрипте)
 local function findPetInBlob(blob)
 	local compact = normalizeKey(blob)
@@ -1206,7 +1230,7 @@ local function buildEggEntry(instance)
 
 	-- имя пета может быть только в имени/тексте детей (как в рабочем скрипте)
 	if not pet then
-		local blobKey = findPetInBlob(buildEggBlob(instance))
+		local blobKey = findPetInBlob(buildEggBlob(instance)) or petFromParents(instance)
 		if blobKey then
 			local config = getPetIndex()[blobKey]
 			pet = (type(config) == "table" and config.DisplayName)
@@ -1310,10 +1334,14 @@ local function collectEggs()
 
 		local shouldDescend = true
 
+		local pruneName = string.lower(tostring(instance.Name))
+		local skipDecor = string.find(pruneName, "creatures", 1, true) ~= nil
+			or string.find(pruneName, "models for egg", 1, true) ~= nil
+
 		local skipPlaced = not CONFIG.INCLUDE_PLACED
 			and string.find(string.lower(tostring(instance.Name)), "placedegg", 1, true) ~= nil
 
-		if skipPlaced or (CONFIG.IGNORE_EVENT_WORLDS and isEventWorld(instance)) then
+		if skipPlaced or skipDecor or (CONFIG.IGNORE_EVENT_WORLDS and isEventWorld(instance)) then
 			shouldDescend = false
 		elseif instance ~= workspace and instance.Parent ~= nil then
 			local matched = tagged[instance] or isEggLike(instance)
