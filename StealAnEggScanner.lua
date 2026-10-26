@@ -95,7 +95,7 @@ local CONFIG = {
 --=========================== СЛУЖБЫ И ХЕЛПЕРЫ ===============================--
 
 local PREFIX  = "[EggScanner]"
-local VERSION = "v33-placed"
+local VERSION = "v34-angeldim"
 
 local Players           = game:GetService("Players")
 local TeleportService   = game:GetService("TeleportService")
@@ -620,8 +620,9 @@ end
 ]]
 -- Миры/папки, которые не сканируем: эвенты, базы игроков, клиентские ассеты
 local IGNORE_WORLDS = {
-	"dimension", "halloween", "plots", "clientrenderedassets",
+	"halloween", "plots", "clientrenderedassets",
 }
+-- ВАЖНО: *Dimension больше НЕ игнорируем — там лежат обычные зоны (Angelic и т.п.)
 
 local function isEventWorld(instance)
 	local lower = string.lower(tostring(instance.Name))
