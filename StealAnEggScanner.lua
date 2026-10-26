@@ -95,7 +95,7 @@ local CONFIG = {
 --=========================== СЛУЖБЫ И ХЕЛПЕРЫ ===============================--
 
 local PREFIX  = "[EggScanner]"
-local VERSION = "v32-counts"
+local VERSION = "v33-placed"
 
 local Players           = game:GetService("Players")
 local TeleportService   = game:GetService("TeleportService")
@@ -2814,6 +2814,52 @@ local function dumpPetObjects(lines)
 	lines[#lines + 1] = "совпадений с именами питомцев: " .. found
 end
 
+-- Яйца, положенные на базы (PlacedEggRenders): атрибуты + тексты
+local function dumpPlacedEggs(lines)
+	local folder = workspace:FindFirstChild("PlacedEggRenders") or workspace:FindFirstChild("PlacedEggs")
+	if not folder then
+		lines[#lines + 1] = "нет PlacedEggRenders"
+		return
+	end
+
+	local children = folder:GetChildren()
+	lines[#lines + 1] = string.format("%s: %d", tostring(folder.Name), #children)
+
+	for index = 1, math.min(#children, 15) do
+		local egg = children[index]
+
+		local parts = {}
+		local ok, attributes = pcall(function()
+			return egg:GetAttributes()
+		end)
+		if ok and type(attributes) == "table" then
+			for name, value in pairs(attributes) do
+				parts[#parts + 1] = tostring(name) .. "=" .. tostring(value):sub(1, 24)
+			end
+		end
+
+		local texts = {}
+		local okDescendants, descendants = pcall(function()
+			return egg:GetDescendants()
+		end)
+		for _, descendant in ipairs(okDescendants and descendants or {}) do
+			if #texts >= 4 then
+				break
+			end
+			if descendant:IsA("TextLabel") or descendant:IsA("TextButton") then
+				local text = tostring(descendant.Text):gsub("\n", " ")
+				if text ~= "" then
+					texts[#texts + 1] = text:sub(1, 32)
+				end
+			end
+		end
+
+		lines[#lines + 1] = string.format("%d) %s | детей %d | %s | текст: %s",
+			index, tostring(egg.Name):sub(1, 26), #(egg:GetChildren()),
+			table.concat(parts, ", "):sub(1, 130), table.concat(texts, " | "))
+	end
+end
+
 local function collectEggInspect()
 	local lines = {}
 	local function add(...)
@@ -2874,6 +2920,10 @@ local function collectEggInspect()
 		describeInstance(first.instance, 1, lines, { left = 30 }, 2)
 		add("")
 	end
+
+	add("[PLACED EGGS]")
+	dumpPlacedEggs(lines)
+	add("")
 
 	add("[ПЕТИ-ОБЪЕКТЫ]")
 	dumpPetObjects(lines)
