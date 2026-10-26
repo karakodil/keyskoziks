@@ -95,7 +95,7 @@ local CONFIG = {
 --=========================== СЛУЖБЫ И ХЕЛПЕРЫ ===============================--
 
 local PREFIX  = "[EggScanner]"
-local VERSION = "v29-petnames"
+local VERSION = "v31-petname-income"
 
 local Players           = game:GetService("Players")
 local TeleportService   = game:GetService("TeleportService")
@@ -687,6 +687,21 @@ local function isEggLike(instance)
 		end
 	end
 
+	-- 2.5) имя совпадает с питомцем: яйца в мире часто названы по питомцу
+	parent = instance.Parent
+	local parentLower = string.lower(tostring(parent and parent.Name or ""))
+	local excludedParent = string.find(parentLower, "convert", 1, true)
+		or string.find(parentLower, "preview", 1, true)
+		or string.find(parentLower, "shop", 1, true)
+
+	if not excludedParent then
+		local petKey = normalizeKey(instance.Name)
+		petKey = petKey:gsub("egg$", ""):gsub("model$", ""):gsub("render$", ""):gsub("^firstarea", "")
+		if petKey ~= "" and getPetIndex()[petKey] then
+			return true
+		end
+	end
+
 	-- 3) имя с "egg" (обвязки пропускаем, но не если внутри есть питомец)
 	local lowerName = string.lower(tostring(instance.Name))
 	if isEggName(lowerName) then
@@ -1084,7 +1099,21 @@ local function buildEggEntry(instance)
 	local value  = readStat(instance, VALUE_ATTRS)
 	local uid, uidName = getEggUid(instance)
 	local pet = getEggPetName(instance)
+	local petConfig = nil
+
+	if not pet then
+		local key = normalizeKey(instance.Name)
+		key = key:gsub("egg$", ""):gsub("model$", ""):gsub("render$", ""):gsub("^firstarea", "")
+		petConfig = key ~= "" and getPetIndex()[key] or nil
+		if petConfig then
+			pet = (type(petConfig) == "table" and petConfig.DisplayName) or instance.Name
+		end
+	end
+
 	local petIncome, petField = getPetIncome(pet)
+	if not petIncome and petConfig then
+		petIncome, petField = findIncomeField(petConfig)
+	end
 
 	local finalIncome = income
 	if (not finalIncome or finalIncome <= 0) and petIncome then
@@ -3292,6 +3321,8 @@ if isTest then
 		hopServer    = hopServer,
 		sendWebhook  = sendWebhook,
 		collectRecon = collectRecon,
+		getPetIndex = getPetIndex,
+		normalizeKey = normalizeKey,
 		eggFingerprint = eggFingerprint,
 		collectEggInspect = collectEggInspect,
 		uploadText   = uploadText,
