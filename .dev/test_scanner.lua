@@ -211,7 +211,7 @@ assert(API, "API not exported")
 
 --============================ тесты =======================================--
 print("== версия ==")
-check(API.VERSION == "v48-nofilters", "версия v48-nofilters (получено " .. tostring(API.VERSION) .. ")")
+check(API.VERSION == "v49-zones", "версия v49-zones (получено " .. tostring(API.VERSION) .. ")")
 
 print("== формат чисел ==")
 check(API.formatNumber(25600000) == "25.6M", "25.6M -> " .. API.formatNumber(25600000))

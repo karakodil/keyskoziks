@@ -99,7 +99,7 @@ local CONFIG = {
 --=========================== СЛУЖБЫ И ХЕЛПЕРЫ ===============================--
 
 local PREFIX  = "[EggScanner]"
-local VERSION = "v48-nofilters"
+local VERSION = "v49-zones"
 
 local Players           = game:GetService("Players")
 local TeleportService   = game:GetService("TeleportService")
@@ -806,13 +806,90 @@ local ZONE_RANGES = {
 	{ "Enchanted Forest", 5127.00, 7600.00 },
 }
 
+local zoneRangesCache = nil
+
+local function computeRangeX(instance)
+	local minX, maxX
+	local okDescendants, descendants = pcall(function()
+		return instance:GetDescendants()
+	end)
+	if not okDescendants or type(descendants) ~= "table" then
+		return nil
+	end
+
+	local count = 0
+	for _, descendant in ipairs(descendants) do
+		if count > 6000 then
+			break
+		end
+		if descendant:IsA("BasePart") then
+			local okPosition, position = pcall(function()
+				return descendant.Position
+			end)
+			if okPosition and position then
+				count = count + 1
+				minX = minX and math.min(minX, position.X) or position.X
+				maxX = maxX and math.max(maxX, position.X) or position.X
+			end
+		end
+	end
+
+	return minX, maxX
+end
+
+local function buildZoneRanges()
+	local ranges, seen = {}, {}
+
+	local function addZone(name, instance)
+		local key = string.lower(tostring(name))
+		if seen[key] then
+			return
+		end
+		local minX, maxX = computeRangeX(instance)
+		if minX and maxX then
+			seen[key] = true
+			ranges[#ranges + 1] = { tostring(name), minX, maxX }
+		end
+	end
+
+	local world = workspace:FindFirstChild("World")
+	local areasFolder = world and world:FindFirstChild("Areas")
+	local guardAreas = areasFolder and areasFolder:FindFirstChild("GuardAreas")
+
+	if guardAreas then
+		for _, area in ipairs(guardAreas:GetChildren()) do
+			addZone(area.Name, area)
+		end
+	end
+
+	-- отдельные измерения: AngelicDimension, DemonicDimension, EnchantedForest...
+	for _, child in ipairs(workspace:GetChildren()) do
+		local lower = string.lower(tostring(child.Name))
+		if string.find(lower, "angel", 1, true)
+			or string.find(lower, "demon", 1, true)
+			or string.find(lower, "enchanted", 1, true) then
+			local name = tostring(child.Name):gsub("%s*Dimension$", ""):gsub("Dimension$", "")
+			addZone(name, child)
+		end
+	end
+
+	return ranges
+end
+
 local function zoneByPosition(position)
 	if not position then
 		return nil
 	end
 
+	if not zoneRangesCache then
+		zoneRangesCache = buildZoneRanges()
+		if #zoneRangesCache == 0 then
+			zoneRangesCache = ZONE_RANGES
+		end
+	end
+
 	local x = position.X
-	for _, zone in ipairs(ZONE_RANGES) do
+	for _, zone in ipairs(zoneRangesCache) do
 		if x >= zone[2] and x <= zone[3] then
 			return zone[1]
 		end
