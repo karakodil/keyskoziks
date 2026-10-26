@@ -95,7 +95,7 @@ local CONFIG = {
 --=========================== СЛУЖБЫ И ХЕЛПЕРЫ ===============================--
 
 local PREFIX  = "[EggScanner]"
-local VERSION = "v28-deep"
+local VERSION = "v29-petnames"
 
 local Players           = game:GetService("Players")
 local TeleportService   = game:GetService("TeleportService")
@@ -575,6 +575,7 @@ local function isEggName(name)
 end
 
 local getEggPetName -- определяется ниже
+local getPetIndex, normalizeKey -- определяются ниже
 
 -- Слова, по которым объект — обвязка, а не само яйцо
 local EGG_SKIP_WORDS = {
@@ -974,11 +975,11 @@ end
 -- Индекс питомцев без пробелов/знаков: "PetalBeetle" == "Petal Beetle"
 local petIndexCache = nil
 
-local function normalizeKey(text)
+function normalizeKey(text)
 	return (string.lower(tostring(text)):gsub("[^%w]", ""))
 end
 
-local function getPetIndex()
+function getPetIndex()
 	if petIndexCache then
 		return petIndexCache
 	end
@@ -2719,6 +2720,64 @@ local function dumpNewEggs(lines)
 	end
 end
 
+-- Объекты, чьё имя совпадает с питомцем (яйца в любых зонах)
+local function dumpPetObjects(lines)
+	local index = getPetIndex()
+	local found, shown = 0, 0
+	local stack = { workspace }
+	local scanned = 0
+
+	while #stack > 0 and shown < 25 do
+		local instance = table.remove(stack)
+		scanned = scanned + 1
+		if scanned > 60000 then
+			break
+		end
+
+		if not (CONFIG.IGNORE_EVENT_WORLDS and isEventWorld(instance)) then
+			for _, child in ipairs(instance:GetChildren()) do
+				stack[#stack + 1] = child
+			end
+		end
+
+		if instance ~= workspace and not (CONFIG.IGNORE_EVENT_WORLDS and insideEventWorld(instance)) then
+			local key = normalizeKey(instance.Name)
+			key = key:gsub("egg$", ""):gsub("model$", ""):gsub("render$", ""):gsub("^firstarea", "")
+
+			if key ~= "" and index[key] then
+				found = found + 1
+
+				if shown < 25 then
+					shown = shown + 1
+
+					local pick = false
+					local okAttrs, attributes = pcall(function()
+						return instance:GetAttributes()
+					end)
+					if okAttrs and type(attributes) == "table" then
+						for name, value in pairs(attributes) do
+							if string.find(string.lower(tostring(name)), "canpickup", 1, true) then
+								pick = true
+								break
+							end
+						end
+					end
+
+					lines[#lines + 1] = string.format("%s (%s) | parent: %s | CanPickUp: %s",
+						shortPath(instance, 62), instance.ClassName,
+						tostring(instance.Parent and instance.Parent.Name or "?"), tostring(pick))
+				end
+			end
+		end
+
+		if scanned % 2000 == 0 then
+			task.wait()
+		end
+	end
+
+	lines[#lines + 1] = "совпадений с именами питомцев: " .. found
+end
+
 local function collectEggInspect()
 	local lines = {}
 	local function add(...)
@@ -2779,6 +2838,10 @@ local function collectEggInspect()
 		describeInstance(first.instance, 1, lines, { left = 30 }, 2)
 		add("")
 	end
+
+	add("[ПЕТИ-ОБЪЕКТЫ]")
+	dumpPetObjects(lines)
+	add("")
 
 	add("[NEW*EGGS]")
 	dumpNewEggs(lines)
