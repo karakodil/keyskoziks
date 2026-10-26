@@ -84,7 +84,8 @@ local CONFIG = {
 	SCAN_REPLICATED   = false,       -- сканировать ещё и ReplicatedStorage
 	IGNORE_EVENT_WORLDS = true,      -- пропускать *Dimension (Halloween и т.п.)
 	STREAM_AREAS      = true,        -- просить клиент догрузить все зоны трека
-	INCLUDE_PLACED    = true,        -- яйца на базах (PlacedEggRenders) — там бывают дорогие с мутациями
+	INCLUDE_PLACED    = true,        -- показывать яйца на базах в списке
+	RANK_PLACED       = false,       -- но НЕ учитывать их в топе/вебхуке (их не украсть)
 	WALK_SLOTS        = false,       -- обход слотов (медленно, телепорт); включай при необходимости
 	WALK_SLOT_DELAY   = 0.4,         -- пауза у каждого слота, сек
 	WALK_MAX_SLOTS    = 70,          -- сколько слотов обходить за один скан
@@ -99,7 +100,7 @@ local CONFIG = {
 --=========================== СЛУЖБЫ И ХЕЛПЕРЫ ===============================--
 
 local PREFIX  = "[EggScanner]"
-local VERSION = "v52-spawnegg"
+local VERSION = "v53-worldtop"
 
 local Players           = game:GetService("Players")
 local TeleportService   = game:GetService("TeleportService")
@@ -1664,7 +1665,9 @@ local function scanServer()
 
 	local ranked = {}
 	for _, entry in pairs(byName) do
-		ranked[#ranked + 1] = entry
+		if CONFIG.RANK_PLACED or not entry.placed then
+			ranked[#ranked + 1] = entry
+		end
 	end
 
 	table.sort(ranked, function(a, b)
