@@ -76,6 +76,10 @@ local slotsClient = addChild(ws, newInstance("Folder", "AreaEggSlotsClient"))
 local slotEgg = addChild(slotsClient, newInstance("Model", "slot1"))
 slotEgg:SetAttribute("PreparedSourceName", "Workspace.NewEnchantedEggs.SpiritPanda")
 
+local slotEgg2 = addChild(slotsClient, newInstance("Model", "slot2"))
+local slotEgg2Child = addChild(slotEgg2, newInstance("Part", "Decal"))
+slotEgg2Child:SetAttribute("EggSource", "Holy Peacock Egg")
+
 local placed = addChild(ws, newInstance("Folder", "PlacedEggRenders"))
 local placedEgg = addChild(placed, newInstance("Model", "8301557848_deadbeef"))
 placedEgg:SetAttribute("PreparedSourceName", "Dread Wolf")
@@ -195,7 +199,7 @@ assert(API, "API not exported")
 
 --============================ тесты =======================================--
 print("== версия ==")
-check(API.VERSION == "v43-walk", "версия v43-walk (получено " .. tostring(API.VERSION) .. ")")
+check(API.VERSION == "v44-eggsource", "версия v44-eggsource (получено " .. tostring(API.VERSION) .. ")")
 
 print("== формат чисел ==")
 check(API.formatNumber(25600000) == "25.6M", "25.6M -> " .. API.formatNumber(25600000))
@@ -223,6 +227,8 @@ check(byName["slot1"] and byName["slot1"].pet == "SpiritPanda", "питомец 
 check(byName["slot1"] and byName["slot1"].income == 90000000, "доход SpiritPanda 90M")
 check(byName["HolyPeacock"] and byName["HolyPeacock"].income == 273000000, "доход HolyPeacock 273M")
 check(byName["HolyPeacock"] and byName["HolyPeacock"].biome == "Cherry Blossom", "биом Cherry Blossom по пути")
+check(byName["slot2"] and byName["slot2"].pet == "Holy Peacock", "EggSource на ребёнке слота: " .. tostring(byName["slot2"] and byName["slot2"].pet))
+check(byName["slot2"] and byName["slot2"].income == 273000000, "доход из EggSource: " .. tostring(byName["slot2"] and byName["slot2"].income))
 check(byName["slot1"] and byName["slot1"].placed == false, "яйцо в мире не помечено placed")
 
 print("== инспектор ==")

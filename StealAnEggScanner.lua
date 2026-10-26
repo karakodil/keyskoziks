@@ -85,7 +85,7 @@ local CONFIG = {
 	IGNORE_EVENT_WORLDS = true,      -- пропускать *Dimension (Halloween и т.п.)
 	STREAM_AREAS      = true,        -- просить клиент догрузить все зоны трека
 	INCLUDE_PLACED    = false,       -- яйца на базах (их украсть нельзя) — не сканируем
-	WALK_SLOTS        = true,        -- обходить слоты: клиент готовит яйцо только рядом с игроком
+	WALK_SLOTS        = false,       -- обход слотов (медленно, телепорт); включай при необходимости
 	WALK_SLOT_DELAY   = 0.4,         -- пауза у каждого слота, сек
 	WALK_MAX_SLOTS    = 70,          -- сколько слотов обходить за один скан
 	SHOW_GUI          = true,        -- небольшое окно со статусом
@@ -99,7 +99,7 @@ local CONFIG = {
 --=========================== СЛУЖБЫ И ХЕЛПЕРЫ ===============================--
 
 local PREFIX  = "[EggScanner]"
-local VERSION = "v43-walk"
+local VERSION = "v44-eggsource"
 
 local Players           = game:GetService("Players")
 local TeleportService   = game:GetService("TeleportService")
@@ -896,6 +896,7 @@ end
 -- Питомец, который вылупится: PreparedSourceName / SourceName / ...
 local PET_ATTRS = {
 	"PreparedSourceName", "SourceName", "PetName", "AssetId", "PetId", "Source",
+	"EggSource", "EggModel", "EggName", "SourceId", "Pet",
 }
 
 -- "Workspace.NewEnchantedEggs.Enchanted Bluejay" -> "Enchanted Bluejay"
@@ -906,6 +907,7 @@ local function normalizePetName(value)
 		text = lastSegment
 	end
 	text = text:gsub("^%s+", ""):gsub("%s+$", "")
+	text = text:gsub("%s+Egg$", "")
 	return text
 end
 
@@ -2675,8 +2677,14 @@ local function dumpSlots(lines)
 			end
 		end
 
-		if #parts == 0 then
+		-- атрибуты детей смотрим всегда (там бывает EggSource/EggModel)
+		do
+			local childIndex = 0
 			for _, child in ipairs(slot:GetChildren()) do
+				childIndex = childIndex + 1
+				if childIndex > 4 then
+					break
+				end
 				local okChild, childAttributes = pcall(function()
 					return child:GetAttributes()
 				end)
