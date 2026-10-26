@@ -84,7 +84,7 @@ local CONFIG = {
 	SCAN_REPLICATED   = false,       -- сканировать ещё и ReplicatedStorage
 	IGNORE_EVENT_WORLDS = true,      -- пропускать *Dimension (Halloween и т.п.)
 	STREAM_AREAS      = true,        -- просить клиент догрузить все зоны трека
-	INCLUDE_PLACED    = false,       -- яйца на базах (их украсть нельзя) — не сканируем
+	INCLUDE_PLACED    = true,        -- яйца на базах (PlacedEggRenders) — там бывают дорогие с мутациями
 	WALK_SLOTS        = false,       -- обход слотов (медленно, телепорт); включай при необходимости
 	WALK_SLOT_DELAY   = 0.4,         -- пауза у каждого слота, сек
 	WALK_MAX_SLOTS    = 70,          -- сколько слотов обходить за один скан
@@ -99,7 +99,7 @@ local CONFIG = {
 --=========================== СЛУЖБЫ И ХЕЛПЕРЫ ===============================--
 
 local PREFIX  = "[EggScanner]"
-local VERSION = "v50-report"
+local VERSION = "v51-placedon"
 
 local Players           = game:GetService("Players")
 local TeleportService   = game:GetService("TeleportService")

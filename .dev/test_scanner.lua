@@ -211,7 +211,7 @@ assert(API, "API not exported")
 
 --============================ тесты =======================================--
 print("== версия ==")
-check(API.VERSION == "v50-report", "версия v50-report (получено " .. tostring(API.VERSION) .. ")")
+check(API.VERSION == "v51-placedon", "версия v51-placedon (получено " .. tostring(API.VERSION) .. ")")
 
 print("== формат чисел ==")
 check(API.formatNumber(25600000) == "25.6M", "25.6M -> " .. API.formatNumber(25600000))
@@ -230,7 +230,9 @@ end
 check(names["Basic Egg"] == true, "яйцо по имени найдено")
 check(names["HolyPeacock"] == true, "яйцо в Nests найдено")
 check(names["slot1"] == true, "яйцо в AreaEggSlotsClient найдено")
-check(names["8301557848_deadbeef"] == nil, "яйцо на базе (PlacedEggRenders) НЕ сканируется")
+check(names["8301557848_deadbeef"] == true, "яйцо на базе (PlacedEggRenders) сканируется")
+check(byName["8301557848_deadbeef"] and byName["8301557848_deadbeef"].placed == true, "помечено placed")
+check(byName["8301557848_deadbeef"] and byName["8301557848_deadbeef"].income == 4900000000, "доход Dread Wolf 4.9B")
 check(names["Koi"] == nil, "эмиттер Koi в водопаде НЕ считается яйцом")
 check(names["Aetheron"] == nil, "станция Convert НЕ считается яйцом")
 check(names["8687390958_10b4"] == nil, "питомец на базе НЕ считается яйцом")
