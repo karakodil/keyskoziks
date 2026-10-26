@@ -90,7 +90,7 @@ local CONFIG = {
 --=========================== СЛУЖБЫ И ХЕЛПЕРЫ ===============================--
 
 local PREFIX  = "[EggScanner]"
-local VERSION = "v9-areas"
+local VERSION = "v10-pets"
 
 local Players           = game:GetService("Players")
 local TeleportService   = game:GetService("TeleportService")
@@ -121,6 +121,7 @@ end
 local pushLog = nil
 local addLog      -- назначается в блоке GUI
 local setStatus   -- назначается в блоке GUI
+local requireModule -- определяется в блоке разведки
 
 -- Перехватываем warn, чтобы предупреждения тоже были видны на экране
 local rawWarn = warn
@@ -629,6 +630,125 @@ local function getEggUid(instance)
 	return nil, nil
 end
 
+-- Питомец, который вылупится: PreparedSourceName / SourceName / ...
+local PET_ATTRS = {
+	"PreparedSourceName", "SourceName", "PetName", "AssetId", "PetId", "Source",
+}
+
+local function getEggPetName(instance)
+	local ok, attributes = pcall(function()
+		return instance:GetAttributes()
+	end)
+
+	if not ok or type(attributes) ~= "table" then
+		return nil
+	end
+
+	for _, name in ipairs(PET_ATTRS) do
+		if attributes[name] ~= nil then
+			return tostring(attributes[name])
+		end
+	end
+
+	for name, value in pairs(attributes) do
+		local lower = string.lower(tostring(name))
+		if string.find(lower, "source", 1, true) or string.find(lower, "pet", 1, true) then
+			return tostring(value)
+		end
+	end
+
+	return nil
+end
+
+-- Поля, в которых может лежать доход в секунду
+local INCOME_FIELDS = {
+	"EarningRate", "Income", "MoneyPerSecond", "Earnings", "PerSecond", "Value",
+}
+
+local function findIncomeField(config)
+	if type(config) ~= "table" then
+		return nil
+	end
+
+	for _, field in ipairs(INCOME_FIELDS) do
+		local value = config[field]
+		if type(value) == "number" and value > 0 then
+			return value, field
+		end
+	end
+
+	if type(config.Egg) == "table" then
+		for _, field in ipairs(INCOME_FIELDS) do
+			local value = config.Egg[field]
+			if type(value) == "number" and value > 0 then
+				return value, "Egg." .. field
+			end
+		end
+	end
+
+	return nil
+end
+
+-- Доход яйца по конфигу питомца (Assets.Directory[pet].BaseConfig)
+local function getPetIncome(petName)
+	if not petName or not requireModule then
+		return nil
+	end
+
+	local assets = requireModule("Assets")
+	if type(assets) ~= "table" or type(assets.Directory) ~= "table" then
+		return nil
+	end
+
+	local entry = assets.Directory[petName]
+
+	if type(entry) ~= "table" then
+		local wanted = string.lower(tostring(petName))
+		for key, value in pairs(assets.Directory) do
+			if string.lower(tostring(key)) == wanted then
+				entry = value
+				break
+			end
+		end
+	end
+
+	if type(entry) ~= "table" then
+		return nil
+	end
+
+	return findIncomeField(entry.BaseConfig) or findIncomeField(entry)
+end
+
+-- Собираем всё про яйцо: атрибуты, UID, биом, питомца и его доход
+local function buildEggEntry(instance)
+	local income = readStat(instance, INCOME_ATTRS)
+	local value  = readStat(instance, VALUE_ATTRS)
+	local uid, uidName = getEggUid(instance)
+	local pet = getEggPetName(instance)
+	local petIncome, petField = getPetIncome(pet)
+
+	local finalIncome = income
+	if (not finalIncome or finalIncome <= 0) and petIncome then
+		finalIncome = petIncome
+	end
+
+	if not finalIncome and not value and not uid and not pet then
+		return nil
+	end
+
+	return {
+		instance = instance,
+		name     = instance.Name,
+		income   = finalIncome or 0,
+		pet      = pet,
+		petField = petField,
+		value    = value or 0,
+		uid      = uid,
+		uidName  = uidName,
+		biome    = getBiomeName(instance),
+	}
+end
+
 --[[
 	Обход workspace (DFS, без рекурсии — не переполнит стек).
 	Яйцом считаем объект, если:
@@ -649,21 +769,10 @@ local function collectEggs()
 
 		-- Тег — самый надёжный признак, учитываем такое яйцо даже вне workspace
 		if not seen[instance] and instance.Parent ~= nil then
-			local income = readStat(instance, INCOME_ATTRS)
-			local value  = readStat(instance, VALUE_ATTRS)
-			local uid, uidName = getEggUid(instance)
-
-			if income or value or uid then
+			local entry = buildEggEntry(instance)
+			if entry then
 				seen[instance] = true
-				results[#results + 1] = {
-					instance = instance,
-					name     = instance.Name,
-					income   = income or 0,
-					value    = value or 0,
-					uid      = uid,
-					uidName  = uidName,
-					biome    = getBiomeName(instance),
-				}
+				results[#results + 1] = entry
 			end
 		end
 	end
@@ -688,21 +797,10 @@ local function collectEggs()
 			local matched = tagged[instance] or isEggLike(instance)
 
 			if matched and not seen[instance] then
-				local income = readStat(instance, INCOME_ATTRS)
-				local value  = readStat(instance, VALUE_ATTRS)
-				local uid, uidName = getEggUid(instance)
-
-				if income or value or uid then
+				local entry = buildEggEntry(instance)
+				if entry then
 					seen[instance] = true
-					results[#results + 1] = {
-						instance = instance,
-						name     = instance.Name,
-						income   = income or 0,
-						value    = value or 0,
-						uid      = uid,
-						uidName  = uidName,
-						biome    = getBiomeName(instance),
-					}
+					results[#results + 1] = entry
 					shouldDescend = false
 				end
 			end
@@ -743,6 +841,8 @@ local function scanServer()
 				biome    = egg.biome or "?",
 				uid      = egg.uid,
 				uidName  = egg.uidName,
+				pet      = egg.pet,
+				petField = egg.petField,
 			}
 		end
 	end
@@ -852,6 +952,7 @@ local function sendWebhook(egg, metric)
 					{ name = "Игроки",         value = string.format("%d/%d", players, maxPlayers), inline = true },
 					{ name = "Биом",          value = tostring(egg.biome or "?"), inline = true },
 					{ name = "UID",           value = tostring(egg.uid or "-"), inline = true },
+					{ name = "Питомец",        value = tostring(egg.pet or "-"), inline = true },
 					{ name = "JobId",          value = "`" .. tostring(jobId) .. "`", inline = false },
 					{ name = "Зайти на сервер", value = "[прямая ссылка](" .. deepLink .. ")", inline = false },
 				},
@@ -1658,7 +1759,7 @@ local function findEggSamples(limit)
 end
 
 -- Достаём модуль из ReplicatedStorage.Data (require в pcall)
-local function requireModule(name)
+function requireModule(name)
 	if not ReplicatedStorage then
 		return nil
 	end
@@ -1792,6 +1893,32 @@ local function dumpConfig(lines)
 	end
 end
 
+local function collectNumericFields(value, prefix, depth, out, budget, seen)
+	if budget.left <= 0 then
+		return
+	end
+
+	if type(value) ~= "table" then
+		if type(value) == "number" then
+			budget.left = budget.left - 1
+			out[#out + 1] = string.format("%s = %s", prefix, tostring(value))
+		end
+		return
+	end
+
+	if depth <= 0 or seen[value] then
+		return
+	end
+	seen[value] = true
+
+	for key, child in pairs(value) do
+		if budget.left <= 0 then
+			return
+		end
+		collectNumericFields(child, prefix .. "." .. tostring(key), depth - 1, out, budget, seen)
+	end
+end
+
 local function collectEggInspect()
 	local lines = {}
 	local function add(...)
@@ -1815,6 +1942,40 @@ local function collectEggInspect()
 		local entry = candidates[index]
 		add("%d) %s | атрибутов: %d | score: %d",
 			index, shortPath(entry.instance, 80), entry.attributes, entry.score)
+	end
+	add("")
+
+	add("[ЯЙЦО → ПИТОМЕЦ]")
+	local assets = requireModule("Assets")
+	local printedPets, printedCount = {}, 0
+	for _, entry in ipairs(candidates) do
+		if printedCount >= 2 then
+			break
+		end
+		local pet = getEggPetName(entry.instance)
+		if pet and not printedPets[pet] then
+			printedPets[pet] = true
+			printedCount = printedCount + 1
+
+			local petIncome, petField = getPetIncome(pet)
+			add("яйцо: %s", shortPath(entry.instance, 70))
+			add("  питомец: %s | доход: %s (%s)", pet,
+				petIncome and formatNumber(petIncome) or "нет",
+				tostring(petField or "-"))
+
+			if assets and assets.Directory then
+				local config = assets.Directory[pet]
+				if type(config) == "table" then
+					local out = {}
+					collectNumericFields(config, pet, 4, out, { left = 40 }, {})
+					for _, line in ipairs(out) do
+						add("  " .. line:sub(1, 110))
+					end
+				else
+					add("  нет записи в Assets.Directory")
+				end
+			end
+		end
 	end
 	add("")
 
@@ -2074,11 +2235,10 @@ local function main()
 
 			if best then
 				log(string.format(
-					"Топ: %s [%s] | Income=%s | Value=%s | UID=%s | типов: %d",
+					"Топ: %s [%s] | Income=%s | питомец=%s | типов: %d",
 					best.name, tostring(best.biome),
 					formatNumber(best.income),
-					formatNumber(best.value),
-					tostring(best.uid or "-"),
+					tostring(best.pet or "-"),
 					types
 				))
 				setStatus(string.format(
