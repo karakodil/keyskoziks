@@ -95,7 +95,7 @@ local CONFIG = {
 --=========================== СЛУЖБЫ И ХЕЛПЕРЫ ===============================--
 
 local PREFIX  = "[EggScanner]"
-local VERSION = "v39-clean"
+local VERSION = "v40-split"
 
 local Players           = game:GetService("Players")
 local TeleportService   = game:GetService("TeleportService")
@@ -1073,6 +1073,21 @@ local function getPetAreaIndex()
 	return index
 end
 
+-- Яйцо посажено на базу (PlacedEggRenders)?
+local function insidePlacedRenders(instance)
+	local node = instance.Parent
+	for _ = 1, 3 do
+		if not node or node == workspace then
+			break
+		end
+		if string.find(string.lower(tostring(node.Name)), "placedegg", 1, true) then
+			return true
+		end
+		node = node.Parent
+	end
+	return false
+end
+
 -- Собираем всё про яйцо: атрибуты, UID, биом, питомца и его доход
 local function buildEggEntry(instance)
 	-- контейнеры (EggPoint, EggSpawn...) не считаем яйцом, иначе не зайдём внутрь
@@ -1142,6 +1157,7 @@ local function buildEggEntry(instance)
 		uidName  = uidName,
 		biome    = biome,
 		source   = source or "other",
+		placed   = insidePlacedRenders(instance),
 	}
 end
 
@@ -1321,6 +1337,7 @@ local function scanServer()
 				pet      = egg.pet,
 				petField = egg.petField,
 				source   = egg.source,
+				placed   = egg.placed,
 			}
 		end
 	end
@@ -3293,19 +3310,19 @@ local function main()
 
 			local best, types, truncated, scanned, allEggs, eggCount, ranked, unknownEggs = scanServer()
 
-			local liveEggs, namedEggs = 0, 0
+			local worldEggs, placedEggs = 0, 0
 			for _, egg in ipairs(allEggs or {}) do
-				if egg.source == "name" then
-					namedEggs = namedEggs + 1
+				if egg.placed then
+					placedEggs = placedEggs + 1
 				else
-					liveEggs = liveEggs + 1
+					worldEggs = worldEggs + 1
 				end
 			end
 
 			local hash = eggFingerprint(allEggs or {})
 			addLog(string.format(
-				"Сервер %s | объектов %d | яиц %d (живых %d, по имени %d) | типов %d | хэш %s",
-				tostring(game.JobId):sub(1, 8), scanned, eggCount or 0, liveEggs, namedEggs, types, hash
+				"Сервер %s | объектов %d | яиц %d (мир %d, базы %d) | типов %d | хэш %s",
+				tostring(game.JobId):sub(1, 8), scanned, eggCount or 0, worldEggs, placedEggs, types, hash
 			))
 
 			local biomesSeen, biomeList = {}, {}

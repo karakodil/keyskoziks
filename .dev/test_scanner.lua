@@ -195,7 +195,7 @@ assert(API, "API not exported")
 
 --============================ тесты =======================================--
 print("== версия ==")
-check(API.VERSION == "v39-clean", "версия v39-clean (получено " .. tostring(API.VERSION) .. ")")
+check(API.VERSION == "v40-split", "версия v40-split (получено " .. tostring(API.VERSION) .. ")")
 
 print("== формат чисел ==")
 check(API.formatNumber(25600000) == "25.6M", "25.6M -> " .. API.formatNumber(25600000))
@@ -224,6 +224,8 @@ check(byName["slot1"] and byName["slot1"].income == 90000000, "доход Spirit
 check(byName["HolyPeacock"] and byName["HolyPeacock"].income == 273000000, "доход HolyPeacock 273M")
 check(byName["8301557848_deadbeef"] and byName["8301557848_deadbeef"].income == 4900000000, "доход Dread Wolf 4.9B")
 check(byName["HolyPeacock"] and byName["HolyPeacock"].biome == "Cherry Blossom", "биом Cherry Blossom по пути")
+check(byName["8301557848_deadbeef"] and byName["8301557848_deadbeef"].placed == true, "яйцо на базе помечено placed")
+check(byName["slot1"] and byName["slot1"].placed == false, "яйцо в мире не помечено placed")
 
 print("== инспектор ==")
 local text = API.collectEggInspect()
