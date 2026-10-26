@@ -99,7 +99,7 @@ local CONFIG = {
 --=========================== СЛУЖБЫ И ХЕЛПЕРЫ ===============================--
 
 local PREFIX  = "[EggScanner]"
-local VERSION = "v46-nodecor"
+local VERSION = "v47-modules"
 
 local Players           = game:GetService("Players")
 local TeleportService   = game:GetService("TeleportService")
@@ -2917,7 +2917,7 @@ local function dumpModules(lines)
 	local stack = { ReplicatedStorage }
 	local scanned = 0
 
-	while #stack > 0 and #modules < 60 do
+	while #stack > 0 and #modules < 150 do
 		local instance = table.remove(stack)
 		scanned = scanned + 1
 		if scanned > 20000 then
@@ -2935,6 +2935,19 @@ local function dumpModules(lines)
 
 	lines[#lines + 1] = string.format("модулей найдено: %d", #modules)
 
+	-- сначала модули с egg/slot/pet/cmd в имени
+	table.sort(modules, function(a, b)
+		local function weight(obj)
+			local name = string.lower(tostring(obj.Name))
+			if string.find(name, "egg", 1, true) then return 1 end
+			if string.find(name, "slot", 1, true) then return 2 end
+			if string.find(name, "pet", 1, true) then return 3 end
+			if string.find(name, "cmd", 1, true) then return 4 end
+			return 9
+		end
+		return weight(a) < weight(b)
+	end)
+
 	local required = 0
 	for _, module in ipairs(modules) do
 		local lower = string.lower(tostring(module.Name))
@@ -2943,7 +2956,7 @@ local function dumpModules(lines)
 			or string.find(lower, "area", 1, true)
 			or string.find(lower, "pet", 1, true)
 
-		if interesting and required < 5 then
+		if interesting and required < 8 then
 			required = required + 1
 			lines[#lines + 1] = "[require] " .. shortPath(module, 70)
 

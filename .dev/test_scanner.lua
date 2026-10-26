@@ -208,7 +208,7 @@ assert(API, "API not exported")
 
 --============================ тесты =======================================--
 print("== версия ==")
-check(API.VERSION == "v46-nodecor", "версия v46-nodecor (получено " .. tostring(API.VERSION) .. ")")
+check(API.VERSION == "v47-modules", "версия v47-modules (получено " .. tostring(API.VERSION) .. ")")
 
 print("== формат чисел ==")
 check(API.formatNumber(25600000) == "25.6M", "25.6M -> " .. API.formatNumber(25600000))
