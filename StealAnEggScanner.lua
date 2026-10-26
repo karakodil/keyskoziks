@@ -62,8 +62,8 @@ local CONFIG = {
 	-- Ссылка на вебхук Discord: Server Settings -> Integrations -> Webhooks
 	WEBHOOK_URL       = "https://discord.com/api/webhooks/1564046515595649105/IRllOp8HwD5O-nNjDV51kII-XkQKkoQhRp97l5v2g40ZRtsSk7cDzGfkqV7r2jav7PTa",
 
-	THRESHOLD         = 1e6,         -- порог дохода, /сек: 1e6 = 1M (Candlefang = 225K)
-	                                 -- в этой игре доходы яиц ~сотни тысяч;
+	THRESHOLD         = 1e9,         -- порог дохода, /сек: 1e9 = 1B
+	                                 -- 5B — уже дорогие яйца, 225K — слабые
 	                                 -- хочешь строже — поставь 5e9
 	THRESHOLD_MODE    = "max",       -- "max" | "income" | "value"
 	                                 --   max = максимум из Income и Value
@@ -92,7 +92,7 @@ local CONFIG = {
 --=========================== СЛУЖБЫ И ХЕЛПЕРЫ ===============================--
 
 local PREFIX  = "[EggScanner]"
-local VERSION = "v11-pickup"
+local VERSION = "v12-top3"
 
 local Players           = game:GetService("Players")
 local TeleportService   = game:GetService("TeleportService")
@@ -754,6 +754,11 @@ local function getPetIncome(petName)
 				entry = value
 				break
 			end
+			if type(value) == "table" and type(value.DisplayName) == "string"
+				and string.lower(value.DisplayName) == wanted then
+				entry = value
+				break
+			end
 		end
 	end
 
@@ -898,15 +903,16 @@ local function scanServer()
 		end
 	end
 
-	local best, types = nil, 0
+	local ranked = {}
 	for _, entry in pairs(byName) do
-		types = types + 1
-		if not best or entry.score > best.score then
-			best = entry
-		end
+		ranked[#ranked + 1] = entry
 	end
 
-	return best, types, truncated, scanned, eggs, #eggs
+	table.sort(ranked, function(a, b)
+		return a.score > b.score
+	end)
+
+	return ranked[1], #ranked, truncated, scanned, eggs, #eggs, ranked
 end
 
 -- Прошло ли яйцо порог (с учётом THRESHOLD_MODE)
@@ -2267,7 +2273,7 @@ local function main()
 
 			setStatus("Сканирование сервера...")
 
-			local best, types, truncated, scanned, allEggs, eggCount = scanServer()
+			local best, types, truncated, scanned, allEggs, eggCount, ranked = scanServer()
 
 			addLog(string.format(
 				"Скан: объектов %d | яиц %d | типов %d | Job %s",
@@ -2286,6 +2292,13 @@ local function main()
 					tostring(best.pet or "-"),
 					types
 				))
+
+				for index = 2, math.min(3, #(ranked or {})) do
+					local item = ranked[index]
+					log(string.format("  #%d %s [%s] %s | %s",
+						index, item.name, tostring(item.biome),
+						formatNumber(item.score), tostring(item.pet or "-")))
+				end
 				setStatus(string.format(
 					"Топ: %s [%s]\n%s | UID %s\nJobId: %s",
 					best.name, tostring(best.biome), formatNumber(best.score),
