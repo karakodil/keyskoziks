@@ -62,7 +62,9 @@ local CONFIG = {
 	-- Ссылка на вебхук Discord: Server Settings -> Integrations -> Webhooks
 	WEBHOOK_URL       = "https://discord.com/api/webhooks/1564046515595649105/IRllOp8HwD5O-nNjDV51kII-XkQKkoQhRp97l5v2g40ZRtsSk7cDzGfkqV7r2jav7PTa",
 
-	THRESHOLD         = 5e9,         -- порог: 5 000 000 000
+	THRESHOLD         = 1e6,         -- порог дохода, /сек: 1e6 = 1M (Candlefang = 225K)
+	                                 -- в этой игре доходы яиц ~сотни тысяч;
+	                                 -- хочешь строже — поставь 5e9
 	THRESHOLD_MODE    = "max",       -- "max" | "income" | "value"
 	                                 --   max = максимум из Income и Value
 
@@ -90,7 +92,7 @@ local CONFIG = {
 --=========================== СЛУЖБЫ И ХЕЛПЕРЫ ===============================--
 
 local PREFIX  = "[EggScanner]"
-local VERSION = "v10-pets"
+local VERSION = "v11-pickup"
 
 local Players           = game:GetService("Players")
 local TeleportService   = game:GetService("TeleportService")
@@ -559,25 +561,68 @@ local function isEggName(name)
 	return string.find(string.lower(name), "egg", 1, true) ~= nil
 end
 
--- Яйцо может называться как угодно, если лежит в WorldEggs / EggNests / EggSpawn
+-- Слова, по которым объект — обвязка, а не само яйцо
+local EGG_SKIP_WORDS = {
+	"holder", "glow", "nest", "spawn", "point", "spot",
+	"fitbounds", "area", "carry", "prompt", "bounds",
+	"display", "storage", "pedestal", "sign", "shop",
+}
+
+-- Контейнеры, в которых реально лежат яйца
+local EGG_CONTAINERS = { "worldeggs", "eggnests" }
+
+local function isEggContainerName(name)
+	local lower = string.lower(tostring(name))
+	for _, container in ipairs(EGG_CONTAINERS) do
+		if string.find(lower, container, 1, true) then
+			return true
+		end
+	end
+	return false
+end
+
+--[[
+	Яйцо определяем строго:
+	  1) атрибут вида ...CanPickUp = true (самый надёжный признак);
+	  2) имя содержит "egg" и не является обвязкой (EggGlow, CarryAreaEgg...);
+	  3) объект лежит прямо в WorldEggs / EggNests.
+	Так отсекаются витрины/пьюты с питомцами, из-за которых раньше
+	в топ попадали объекты вида 11654316434_8f699e...
+]]
 local function isEggLike(instance)
 	if instance:IsA("Folder") then
 		return false
 	end
 
-	if isEggName(instance.Name) then
+	local ok, attributes = pcall(function()
+		return instance:GetAttributes()
+	end)
+	if ok and type(attributes) == "table" then
+		for name, value in pairs(attributes) do
+			if value == true and string.find(string.lower(tostring(name)), "canpickup", 1, true) then
+				return true
+			end
+		end
+	end
+
+	local lowerName = string.lower(tostring(instance.Name))
+	if isEggName(lowerName) then
+		for _, word in ipairs(EGG_SKIP_WORDS) do
+			if string.find(lowerName, word, 1, true) then
+				return false
+			end
+		end
 		return true
 	end
 
-	local node = instance.Parent
-	for _ = 1, 3 do
-		if not node or node == workspace then
-			break
-		end
-		if isEggName(node.Name) then
-			return true
-		end
-		node = node.Parent
+	local parent = instance.Parent
+	if parent and isEggContainerName(parent.Name) then
+		return true
+	end
+
+	local grandParent = parent and parent.Parent
+	if grandParent and isEggContainerName(grandParent.Name) then
+		return true
 	end
 
 	return false
@@ -716,7 +761,12 @@ local function getPetIncome(petName)
 		return nil
 	end
 
-	return findIncomeField(entry.BaseConfig) or findIncomeField(entry)
+	local value, field = findIncomeField(entry.BaseConfig)
+	if not value then
+		value, field = findIncomeField(entry)
+	end
+
+	return value, field
 end
 
 -- Собираем всё про яйцо: атрибуты, UID, биом, питомца и его доход
@@ -1672,12 +1722,6 @@ local function describeInstance(instance, depth, lines, budget, maxDepth)
 		describeInstance(child, depth + 1, lines, budget)
 	end
 end
-
--- Слова, по которым объект считаем НЕ яйцом, а обвязкой
-local EGG_SKIP_WORDS = {
-	"holder", "glow", "nest", "spawn", "point", "spot",
-	"fitbounds", "area", "carry", "prompt", "bounds",
-}
 
 -- Ищем настоящие яйца: под WorldEggs/EggNests, без слов-обвязок
 local function findEggSamples(limit)
