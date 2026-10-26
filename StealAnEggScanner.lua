@@ -93,7 +93,7 @@ local CONFIG = {
 --=========================== СЛУЖБЫ И ХЕЛПЕРЫ ===============================--
 
 local PREFIX  = "[EggScanner]"
-local VERSION = "v13-hash"
+local VERSION = "v14-track"
 
 local Players           = game:GetService("Players")
 local TeleportService   = game:GetService("TeleportService")
@@ -1998,6 +1998,56 @@ local function collectNumericFields(value, prefix, depth, out, budget, seen)
 	end
 end
 
+-- Разбор трека: Workspace.World.Areas.GuardAreas.<Area>.Guard.EggPoint
+local function dumpTrack(lines)
+	local world = workspace:FindFirstChild("World")
+	local areas = world and world:FindFirstChild("Areas")
+	local guardAreas = areas and areas:FindFirstChild("GuardAreas")
+
+	if not guardAreas then
+		lines[#lines + 1] = "нет Workspace.World.Areas.GuardAreas"
+		return
+	end
+
+	local printed = 0
+	for _, area in ipairs(guardAreas:GetChildren()) do
+		if printed >= 20 then
+			break
+		end
+		printed = printed + 1
+
+		lines[#lines + 1] = string.format("%s (%s) | детей: %d",
+			area.Name, area.ClassName, #(area:GetChildren()))
+
+		local guard = area:FindFirstChild("Guard")
+		if guard then
+			lines[#lines + 1] = string.format("  Guard | детей: %d", #(guard:GetChildren()))
+
+			for _, child in ipairs(guard:GetChildren()) do
+				if string.find(string.lower(child.Name), "egg", 1, true) then
+					local parts = {}
+					local okAttrs, attributes = pcall(function()
+						return child:GetAttributes()
+					end)
+					if okAttrs and type(attributes) == "table" then
+						for name, value in pairs(attributes) do
+							parts[#parts + 1] = tostring(name) .. "=" .. tostring(value):sub(1, 28)
+						end
+					end
+
+					lines[#lines + 1] = string.format("    %s (%s) | детей %d | %s",
+						child.Name, child.ClassName, #(child:GetChildren()),
+						table.concat(parts, ", "):sub(1, 160))
+
+					for _, sub in ipairs(child:GetChildren()) do
+						lines[#lines + 1] = string.format("      %s (%s)", sub.Name, sub.ClassName)
+					end
+				end
+			end
+		end
+	end
+end
+
 local function collectEggInspect()
 	local lines = {}
 	local function add(...)
@@ -2014,6 +2064,10 @@ local function collectEggInspect()
 	-- конфиг идёт ПЕРВЫМ, чтобы не обрезался
 	add("[CONFIG]")
 	dumpConfig(lines)
+	add("")
+
+	add("[ТРЕК]")
+	dumpTrack(lines)
 	add("")
 
 	add("[СПИСОК ЯИЦ]")
