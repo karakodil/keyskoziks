@@ -878,7 +878,8 @@ local function scanServer()
 	local byName = {}
 	for _, egg in ipairs(eggs) do
 		local score = math.max(egg.income, egg.value)
-		local key = string.lower(egg.name)
+		-- группируем по питомцу: у одинаковых яиц разные питомцы и разный доход
+		local key = string.lower(tostring(egg.pet or "?")) .. "|" .. string.lower(egg.name)
 		local previous = byName[key]
 
 		if not previous or score > previous.score then
@@ -905,7 +906,7 @@ local function scanServer()
 		end
 	end
 
-	return best, types, truncated, scanned, eggs
+	return best, types, truncated, scanned, eggs, #eggs
 end
 
 -- Прошло ли яйцо порог (с учётом THRESHOLD_MODE)
@@ -2266,11 +2267,11 @@ local function main()
 
 			setStatus("Сканирование сервера...")
 
-			local best, types, truncated, scanned = scanServer()
+			local best, types, truncated, scanned, allEggs, eggCount = scanServer()
 
 			addLog(string.format(
-				"Скан: объектов %d, типов %d, JobId %s",
-				scanned, types, tostring(game.JobId):sub(1, 8)
+				"Скан: объектов %d | яиц %d | типов %d | Job %s",
+				scanned, eggCount or 0, types, tostring(game.JobId):sub(1, 8)
 			))
 
 			if truncated then
