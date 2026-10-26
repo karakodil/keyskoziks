@@ -80,6 +80,9 @@ local slotEgg2 = addChild(slotsClient, newInstance("Model", "slot2"))
 local slotEgg2Child = addChild(slotEgg2, newInstance("Part", "Decal"))
 slotEgg2Child:SetAttribute("EggSource", "Holy Peacock Egg")
 
+local slot4 = addChild(slotsClient, newInstance("Model", "slot4"))
+addChild(slot4, newInstance("Part", "Plane"))
+
 local slot3 = addChild(slotsClient, newInstance("Model", "slot3"))
 addChild(slot3, newInstance("MeshPart", "HolyPeacockMesh"))
 
@@ -208,7 +211,7 @@ assert(API, "API not exported")
 
 --============================ тесты =======================================--
 print("== версия ==")
-check(API.VERSION == "v47-modules", "версия v47-modules (получено " .. tostring(API.VERSION) .. ")")
+check(API.VERSION == "v48-nofilters", "версия v48-nofilters (получено " .. tostring(API.VERSION) .. ")")
 
 print("== формат чисел ==")
 check(API.formatNumber(25600000) == "25.6M", "25.6M -> " .. API.formatNumber(25600000))
@@ -232,6 +235,7 @@ check(names["Koi"] == nil, "эмиттер Koi в водопаде НЕ счит
 check(names["Aetheron"] == nil, "станция Convert НЕ считается яйцом")
 check(names["8687390958_10b4"] == nil, "питомец на базе НЕ считается яйцом")
 check(names["Models for egg.053"] == nil, "лапа кракена (Models for egg) НЕ считается яйцом")
+check(names["slot4"] == true, "слот без пета тоже показывается")
 
 check(byName["slot1"] and byName["slot1"].pet == "SpiritPanda", "питомец из PreparedSourceName")
 check(byName["slot1"] and byName["slot1"].income == 90000000, "доход SpiritPanda 90M")

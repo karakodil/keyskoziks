@@ -99,7 +99,7 @@ local CONFIG = {
 --=========================== СЛУЖБЫ И ХЕЛПЕРЫ ===============================--
 
 local PREFIX  = "[EggScanner]"
-local VERSION = "v47-modules"
+local VERSION = "v48-nofilters"
 
 local Players           = game:GetService("Players")
 local TeleportService   = game:GetService("TeleportService")
@@ -790,6 +790,37 @@ local function nearestAreaName(instance)
 	return bestName
 end
 
+-- Диапазоны зон по X (взято из рабочего скрипта, расширено)
+local ZONE_RANGES = {
+	{ "Forest", 553.42, 646.49 },
+	{ "Lake", 653.01, 793.51 },
+	{ "Desert", 796.48, 1005.04 },
+	{ "Jungle", 1008.56, 1240.12 },
+	{ "Snow", 1244.13, 1564.18 },
+	{ "Volcano", 1568.33, 1949.58 },
+	{ "Abyss Ocean", 1953.30, 2378.73 },
+	{ "Prehistoric", 2382.87, 2884.09 },
+	{ "Cosmic", 2888.03, 3523.51 },
+	{ "Cherry Blossom", 3527.67, 4263.53 },
+	{ "Titan Temple", 4268.09, 5123.06 },
+	{ "Enchanted Forest", 5127.00, 7600.00 },
+}
+
+local function zoneByPosition(position)
+	if not position then
+		return nil
+	end
+
+	local x = position.X
+	for _, zone in ipairs(ZONE_RANGES) do
+		if x >= zone[2] and x <= zone[3] then
+			return zone[1]
+		end
+	end
+
+	return nil
+end
+
 local areaNameCache = nil
 
 local function getAreaNames()
@@ -879,6 +910,19 @@ local function getBiomeName(instance)
 	local nearest = nearestAreaName(instance)
 	if nearest then
 		return nearest
+	end
+
+	local okPivot, pivot = pcall(function()
+		if instance:IsA("BasePart") then
+			return instance.Position
+		end
+		return instance:GetPivot().Position
+	end)
+	if okPivot and pivot then
+		local zoneName = zoneByPosition(pivot)
+		if zoneName then
+			return zoneName
+		end
 	end
 
 	if eggContainerName then
@@ -1258,7 +1302,14 @@ local function buildEggEntry(instance)
 	end
 
 	if not finalIncome and not value and not uid and not pet then
-		return nil
+		-- слоты AreaEggSlotsClient и гнёзда показываем даже без данных
+		local parentName = instance.Parent and string.lower(tostring(instance.Parent.Name)) or ""
+		local allowedEmpty = string.find(parentName, "areaeggslots", 1, true)
+			or string.find(parentName, "nests", 1, true)
+
+		if not allowedEmpty then
+			return nil
+		end
 	end
 
 	local displayName = instance.Name
