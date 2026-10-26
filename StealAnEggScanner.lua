@@ -94,7 +94,7 @@ local CONFIG = {
 --=========================== СЛУЖБЫ И ХЕЛПЕРЫ ===============================--
 
 local PREFIX  = "[EggScanner]"
-local VERSION = "v15-track"
+local VERSION = "v16-petname"
 
 local Players           = game:GetService("Players")
 local TeleportService   = game:GetService("TeleportService")
@@ -670,7 +670,43 @@ local function isEggLike(instance)
 	return false
 end
 
--- Биом: либо <X>Dimension, либо Workspace.World.Areas.GuardAreas.<Area>
+local areaNameCache = nil
+
+local function getAreaNames()
+	if areaNameCache then
+		return areaNameCache
+	end
+
+	local names = {}
+	local areas = requireModule and requireModule("Areas")
+	if type(areas) == "table" and type(areas.Directory) == "table" then
+		for key in pairs(areas.Directory) do
+			names[#names + 1] = tostring(key)
+		end
+	end
+
+	areaNameCache = names
+	return names
+end
+
+local function matchAreaName(text)
+	local lower = string.lower(tostring(text))
+	local best = nil
+
+	for _, areaName in ipairs(getAreaNames()) do
+		local areaLower = string.lower(areaName)
+		local firstWord = areaLower:match("^(%S+)") or areaLower
+		if #firstWord >= 4 and string.find(lower, firstWord, 1, true) then
+			if not best or #areaName > #best then
+				best = areaName
+			end
+		end
+	end
+
+	return best
+end
+
+-- Биом: <X>Dimension, GuardAreas.<Area> или имя контейнера (NewEnchantedEggs)
 local function getBiomeName(instance)
 	local node = instance.Parent
 	for _ = 1, 6 do
@@ -690,6 +726,11 @@ local function getBiomeName(instance)
 			if parentName == "guardareas" or parentName == "areas" then
 				return node.Name
 			end
+		end
+
+		local areaName = matchAreaName(node.Name)
+		if areaName then
+			return areaName
 		end
 
 		node = node.Parent
@@ -722,6 +763,17 @@ local PET_ATTRS = {
 	"PreparedSourceName", "SourceName", "PetName", "AssetId", "PetId", "Source",
 }
 
+-- "Workspace.NewEnchantedEggs.Enchanted Bluejay" -> "Enchanted Bluejay"
+local function normalizePetName(value)
+	local text = tostring(value)
+	local lastSegment = text:match("([^%.]+)$")
+	if lastSegment and lastSegment ~= "" then
+		text = lastSegment
+	end
+	text = text:gsub("^%s+", ""):gsub("%s+$", "")
+	return text
+end
+
 local function getEggPetName(instance)
 	local ok, attributes = pcall(function()
 		return instance:GetAttributes()
@@ -733,14 +785,14 @@ local function getEggPetName(instance)
 
 	for _, name in ipairs(PET_ATTRS) do
 		if attributes[name] ~= nil then
-			return tostring(attributes[name])
+			return normalizePetName(attributes[name])
 		end
 	end
 
 	for name, value in pairs(attributes) do
 		local lower = string.lower(tostring(name))
 		if string.find(lower, "source", 1, true) or string.find(lower, "pet", 1, true) then
-			return tostring(value)
+			return normalizePetName(value)
 		end
 	end
 
@@ -833,9 +885,14 @@ local function buildEggEntry(instance)
 		return nil
 	end
 
+	local displayName = instance.Name
+	if #displayName >= 24 and displayName:match("^%x+$") and pet then
+		displayName = pet
+	end
+
 	return {
 		instance = instance,
-		name     = instance.Name,
+		name     = displayName,
 		income   = finalIncome or 0,
 		pet      = pet,
 		petField = petField,
@@ -1801,7 +1858,10 @@ local function findEggSamples(limit)
 		local instance = table.remove(stack)
 		scanned = scanned + 1
 
-		local matched = instance ~= workspace
+		local inEventWorld = CONFIG.IGNORE_EVENT_WORLDS and isEventWorld(instance)
+
+		local matched = not inEventWorld
+			and instance ~= workspace
 			and instance.Parent ~= nil
 			and isEggName(instance.Name)
 			and not instance:IsA("Folder")
@@ -1849,7 +1909,7 @@ local function findEggSamples(limit)
 					attributes = attributeCount,
 				}
 			end
-		else
+		elseif not inEventWorld then
 			for _, child in ipairs(instance:GetChildren()) do
 				stack[#stack + 1] = child
 			end
