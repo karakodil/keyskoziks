@@ -83,6 +83,7 @@ local CONFIG = {
 	MAX_SCAN_OBJECTS  = 200000,      -- предохранитель от зависания на огромных картах
 	SCAN_REPLICATED   = false,       -- сканировать ещё и ReplicatedStorage
 	IGNORE_EVENT_WORLDS = true,      -- пропускать *Dimension (Halloween и т.п.)
+	STREAM_AREAS      = true,        -- просить клиент догрузить все зоны трека
 	SHOW_GUI          = true,        -- небольшое окно со статусом
 	AUTO_RELOAD       = true,        -- queue_on_teleport: перезапуск после телепорта
 	SCRIPT_URL        = "https://raw.githubusercontent.com/karakodil/keyskoziks/egg-scanner/StealAnEggScanner.lua",
@@ -94,7 +95,7 @@ local CONFIG = {
 --=========================== СЛУЖБЫ И ХЕЛПЕРЫ ===============================--
 
 local PREFIX  = "[EggScanner]"
-local VERSION = "v22-noaether"
+local VERSION = "v23-stream"
 
 local Players           = game:GetService("Players")
 local TeleportService   = game:GetService("TeleportService")
@@ -573,6 +574,8 @@ local function isEggName(name)
 	return string.find(string.lower(name), "egg", 1, true) ~= nil
 end
 
+local getEggPetName -- определяется ниже
+
 -- Слова, по которым объект — обвязка, а не само яйцо
 local EGG_SKIP_WORDS = {
 	"holder", "glow", "nest", "spawn", "point", "spot",
@@ -641,16 +644,20 @@ local function isEggLike(instance)
 		return false
 	end
 
-	-- 1) лежит прямо в контейнере яиц (WorldEggs, EggNests, EggPoint, EggSpawn...)
-	local parent = instance.Parent
-	if parent and isEggContainerName(parent.Name) then
-		return true
+	-- 1) лежит в контейнере яиц на глубине до 3 уровней
+	local node = instance.Parent
+	for _ = 1, 3 do
+		if not node or node == workspace then
+			break
+		end
+		if isEggContainerName(node.Name) then
+			return true
+		end
+		node = node.Parent
 	end
 
-	local grandParent = parent and parent.Parent
-	if grandParent and isEggContainerName(grandParent.Name) then
-		return true
-	end
+	-- питомец в атрибутах: яйцо даже если имя похоже на обвязку
+	local petName = getEggPetName(instance)
 
 	-- 2) атрибуты, по которым яйцо узнаётся в любой зоне
 	local ok, attributes = pcall(function()
@@ -668,9 +675,12 @@ local function isEggLike(instance)
 		end
 	end
 
-	-- 3) имя с "egg" и не обвязка
+	-- 3) имя с "egg" (обвязки пропускаем, но не если внутри есть питомец)
 	local lowerName = string.lower(tostring(instance.Name))
 	if isEggName(lowerName) then
+		if petName then
+			return true
+		end
 		for _, word in ipairs(EGG_SKIP_WORDS) do
 			if string.find(lowerName, word, 1, true) then
 				return false
@@ -810,7 +820,7 @@ local function normalizePetName(value)
 	return text
 end
 
-local function getEggPetName(instance)
+function getEggPetName(instance)
 	local ok, attributes = pcall(function()
 		return instance:GetAttributes()
 	end)
@@ -1101,7 +1111,66 @@ local function eggFingerprint(eggs)
 end
 
 -- Собираем лучшее яйцо по каждому имени, затем выбираем максимум
+-- Позиция зоны (EggPoint или любая часть)
+local function findAreaPosition(area)
+	local guard = area:FindFirstChild("Guard")
+	local eggPoint = guard and guard:FindFirstChild("EggPoint")
+	if eggPoint and eggPoint:IsA("BasePart") then
+		return eggPoint.Position
+	end
+
+	for _, descendant in ipairs(area:GetDescendants()) do
+		if descendant:IsA("BasePart") then
+			return descendant.Position
+		end
+	end
+
+	return nil
+end
+
+-- Просим клиент догрузить все зоны трека (если включён стриминг)
+local function streamAllAreas()
+	if not CONFIG.STREAM_AREAS then
+		return 0
+	end
+
+	local okEnabled, enabled = pcall(function()
+		return workspace.StreamingEnabled
+	end)
+	if not okEnabled or not enabled then
+		return 0
+	end
+
+	local world = workspace:FindFirstChild("World")
+	local areasFolder = world and world:FindFirstChild("Areas")
+	local guardAreas = areasFolder and areasFolder:FindFirstChild("GuardAreas")
+	if not guardAreas then
+		return 0
+	end
+
+	local count = 0
+	for _, area in ipairs(guardAreas:GetChildren()) do
+		local position = findAreaPosition(area)
+		if position then
+			local okRequest = pcall(function()
+				workspace:RequestStreamAroundAsync(position, 3)
+			end)
+			if okRequest then
+				count = count + 1
+			end
+			task.wait(0.35)
+		end
+	end
+
+	return count
+end
+
 local function scanServer()
+	local streamed = streamAllAreas()
+	if streamed > 0 then
+		task.wait(1)
+	end
+
 	local eggs, truncated, scanned = collectEggs()
 
 	local byName = {}
