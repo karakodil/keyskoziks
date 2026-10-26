@@ -95,7 +95,7 @@ local CONFIG = {
 --=========================== СЛУЖБЫ И ХЕЛПЕРЫ ===============================--
 
 local PREFIX  = "[EggScanner]"
-local VERSION = "v38-sources"
+local VERSION = "v39-clean"
 
 local Players           = game:GetService("Players")
 local TeleportService   = game:GetService("TeleportService")
@@ -587,24 +587,23 @@ local EGG_SKIP_WORDS = {
 -- Контейнеры, в которых реально лежат яйца (включая трек)
 local EGG_CONTAINERS = {
 	"worldeggs", "eggnests", "eggpoint", "eggspawn", "eggspot", "eggs",
+	"nests", "nestmodel", "placedegg",
 }
 
 local function isEggContainerName(name)
 	local lower = string.lower(tostring(name))
 
-	if lower == "eggs" or lower == "worldeggs" or lower == "eggnests" then
-		return true
-	end
-
-	for _, container in ipairs({ "worldeggs", "eggnests", "eggpoint", "eggspawn", "eggspot" }) do
-		if string.find(lower, container, 1, true) then
+	for _, container in ipairs(EGG_CONTAINERS) do
+		if container ~= "eggs" and string.find(lower, container, 1, true) then
 			return true
 		end
 	end
 
-	-- AreaEggSlotsClient / NewEnchantedEggs, но не AreaEggSlot1
+	-- AreaEggSlotsClient / WorldEggs / NewEnchantedEggs (но не AreaEggSlot1)
 	if string.find(lower, "eggs", 1, true) then
-		return string.sub(lower, -6) == "client" or string.sub(lower, -4) == "eggs"
+		return string.sub(lower, -6) == "client"
+			or string.sub(lower, -4) == "eggs"
+			or lower == "eggs"
 	end
 
 	return false
@@ -685,21 +684,6 @@ local function isEggLike(instance)
 				or (string.find(key, "egg", 1, true) and string.find(key, "uid", 1, true)) then
 				return true
 			end
-		end
-	end
-
-	-- 2.5) имя совпадает с питомцем: яйца в мире часто названы по питомцу
-	parent = instance.Parent
-	local parentLower = string.lower(tostring(parent and parent.Name or ""))
-	local excludedParent = string.find(parentLower, "convert", 1, true)
-		or string.find(parentLower, "preview", 1, true)
-		or string.find(parentLower, "shop", 1, true)
-
-	if not excludedParent then
-		local petKey = normalizeKey(instance.Name)
-		petKey = petKey:gsub("egg$", ""):gsub("model$", ""):gsub("render$", ""):gsub("^firstarea", "")
-		if petKey ~= "" and getPetIndex()[petKey] then
-			return true
 		end
 	end
 
