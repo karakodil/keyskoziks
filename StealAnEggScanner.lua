@@ -95,7 +95,7 @@ local CONFIG = {
 --=========================== СЛУЖБЫ И ХЕЛПЕРЫ ===============================--
 
 local PREFIX  = "[EggScanner]"
-local VERSION = "v34-angeldim"
+local VERSION = "v35-exact"
 
 local Players           = game:GetService("Players")
 local TeleportService   = game:GetService("TeleportService")
@@ -1116,6 +1116,13 @@ local function buildEggEntry(instance)
 		petIncome, petField = findIncomeField(petConfig)
 	end
 
+	-- реальное значение может быть выше конфига (мутация/вес) — читаем с яйца
+	local labelIncome = readStatFromLabels(instance)
+	if labelIncome and (not petIncome or labelIncome > petIncome) then
+		petIncome = labelIncome
+		petField = petField or "label"
+	end
+
 	local finalIncome = income
 	if (not finalIncome or finalIncome <= 0) and petIncome then
 		finalIncome = petIncome
@@ -1367,23 +1374,23 @@ local function isValuable(egg)
 	return metric >= CONFIG.THRESHOLD, metric
 end
 
--- 1500000000 -> "1.50B"
+-- 1500000000 -> "1 500 000 000" (точная сумма с разрядами)
 local function formatNumber(number)
-	if type(number) ~= "number" then
+	if type(number) ~= "number" or number ~= number then
 		return "?"
 	end
 
-	local units = {
-		{ 1e15, "Q" }, { 1e12, "T" }, { 1e9, "B" }, { 1e6, "M" }, { 1e3, "K" },
-	}
+	local negative = number < 0
+	local value = math.floor(math.abs(number))
 
-	for _, unit in ipairs(units) do
-		if number >= unit[1] then
-			return string.format("%.2f%s", number / unit[1], unit[2])
-		end
+	local text = tostring(value):reverse():gsub("(%d%d%d)", "%1 "):reverse()
+	text = text:gsub("^%s+", ""):gsub("%s+$", "")
+
+	if negative then
+		text = "-" .. text
 	end
 
-	return string.format("%d", math.floor(number))
+	return text
 end
 
 --============================= DISCORD WEBHOOK ==============================--
