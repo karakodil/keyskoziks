@@ -62,9 +62,9 @@ local CONFIG = {
 	-- Ссылка на вебхук Discord: Server Settings -> Integrations -> Webhooks
 	WEBHOOK_URL       = "https://discord.com/api/webhooks/1564046515595649105/IRllOp8HwD5O-nNjDV51kII-XkQKkoQhRp97l5v2g40ZRtsSk7cDzGfkqV7r2jav7PTa",
 
-	THRESHOLD         = 1e9,         -- порог дохода, /сек: 1e9 = 1B
-	                                 -- 5B — уже дорогие яйца, 225K — слабые
-	                                 -- хочешь строже — поставь 5e9
+	THRESHOLD         = 1e6,         -- порог дохода, /сек: 1e6 = 1M
+	                                 -- яйца в треке дают ~0.3M-3M;
+	                                 -- строже: 1e9 (1B) или 5e9 (5B)
 	THRESHOLD_MODE    = "max",       -- "max" | "income" | "value"
 	                                 --   max = максимум из Income и Value
 
