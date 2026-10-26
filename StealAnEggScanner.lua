@@ -2562,7 +2562,10 @@ local function dumpSlots(lines)
 		-- тексты внутри слота (BillboardGui/TextLabel) — часто там имя/цена яйца
 		local texts = {}
 		local budget = 4
-		for _, descendant in ipairs(slot:GetDescendants()) do
+		local okDescendants, descendants = pcall(function()
+			return slot:GetDescendants()
+		end)
+		for _, descendant in ipairs(okDescendants and descendants or {}) do
 			if budget <= 0 then
 				break
 			end
