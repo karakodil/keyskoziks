@@ -99,7 +99,7 @@ local CONFIG = {
 --=========================== СЛУЖБЫ И ХЕЛПЕРЫ ===============================--
 
 local PREFIX  = "[EggScanner]"
-local VERSION = "v51-placedon"
+local VERSION = "v52-spawnegg"
 
 local Players           = game:GetService("Players")
 local TeleportService   = game:GetService("TeleportService")
@@ -3369,6 +3369,105 @@ local function dumpNests(lines)
 	end
 end
 
+-- Яйцо у спавна (x < 700) целиком: атрибуты, меши, prompt'ы
+local function dumpSpawnEgg(lines)
+	local slots = workspace:FindFirstChild("AreaEggSlotsClient")
+	if not slots then
+		lines[#lines + 1] = "нет AreaEggSlotsClient"
+		return
+	end
+
+	local shown = 0
+	for _, slot in ipairs(slots:GetChildren()) do
+		if shown >= 2 then
+			break
+		end
+
+		local okPivot, pivot = pcall(function()
+			return slot:GetPivot().Position
+		end)
+		if okPivot and pivot and pivot.X < 700 then
+			shown = shown + 1
+			lines[#lines + 1] = string.format("=== Спавн-яйцо: %s | x=%.0f ===",
+				tostring(slot.Name), pivot.X)
+
+			local okDescendants, descendants = pcall(function()
+				return slot:GetDescendants()
+			end)
+			for _, descendant in ipairs(okDescendants and descendants or {}) do
+				local parts = {}
+				local okAttrs, attributes = pcall(function()
+					return descendant:GetAttributes()
+				end)
+				if okAttrs and type(attributes) == "table" then
+					for name, value in pairs(attributes) do
+						parts[#parts + 1] = tostring(name) .. "=" .. tostring(value):sub(1, 26)
+					end
+				end
+
+				local meshId
+				local okMesh, mesh = pcall(function()
+					return descendant.MeshId
+				end)
+				if okMesh and mesh and tostring(mesh) ~= "" then
+					meshId = tostring(mesh)
+				end
+
+				lines[#lines + 1] = string.format("  %s (%s) | %s | %s",
+					tostring(descendant.Name):sub(1, 30), descendant.ClassName,
+					table.concat(parts, ", "):sub(1, 120), meshId or "")
+			end
+		end
+	end
+end
+
+-- SmartPromptPart: где живёт кнопка "взять"
+local function dumpSmartPrompts(lines)
+	local prompts = workspace:FindFirstChild("SmartPromptPart")
+	if not prompts then
+		lines[#lines + 1] = "нет SmartPromptPart"
+		return
+	end
+
+	lines[#lines + 1] = string.format("SmartPromptPart: детей %d", #(prompts:GetChildren()))
+	for index, child in ipairs(prompts:GetChildren()) do
+		if index > 12 then
+			break
+		end
+
+		local parts = {}
+		local okAttrs, attributes = pcall(function()
+			return child:GetAttributes()
+		end)
+		if okAttrs and type(attributes) == "table" then
+			for name, value in pairs(attributes) do
+				parts[#parts + 1] = tostring(name) .. "=" .. tostring(value):sub(1, 24)
+			end
+		end
+
+		lines[#lines + 1] = string.format("%d) %s (%s) | детей %d | %s",
+			index, tostring(child.Name):sub(1, 26), child.ClassName,
+			#(child:GetChildren()), table.concat(parts, ", "):sub(1, 130))
+
+		for childIndex, sub in ipairs(child:GetChildren()) do
+			if childIndex > 4 then
+				break
+			end
+			local subAttrs = {}
+			local okSub, attributesSub = pcall(function()
+				return sub:GetAttributes()
+			end)
+			if okSub and type(attributesSub) == "table" then
+				for name, value in pairs(attributesSub) do
+					subAttrs[#subAttrs + 1] = tostring(name) .. "=" .. tostring(value):sub(1, 24)
+				end
+			end
+			lines[#lines + 1] = string.format("    %s (%s) | %s",
+				tostring(sub.Name):sub(1, 24), sub.ClassName, table.concat(subAttrs, ", "):sub(1, 110))
+		end
+	end
+end
+
 local function collectEggInspect()
 	local lines = {}
 	local function add(...)
@@ -3383,6 +3482,14 @@ local function collectEggInspect()
 	add("")
 
 	-- сначала самое важное: модули (EggCmds) и слоты
+	add("[СПАВН-ЯЙЦО]")
+	dumpSpawnEgg(lines)
+	add("")
+
+	add("[SMART PROMPTS]")
+	dumpSmartPrompts(lines)
+	add("")
+
 	add("[МОДУЛИ]")
 	dumpModules(lines)
 	add("")
