@@ -85,6 +85,9 @@ local CONFIG = {
 	IGNORE_EVENT_WORLDS = true,      -- пропускать *Dimension (Halloween и т.п.)
 	STREAM_AREAS      = true,        -- просить клиент догрузить все зоны трека
 	INCLUDE_PLACED    = false,       -- яйца на базах (их украсть нельзя) — не сканируем
+	WALK_SLOTS        = true,        -- обходить слоты: клиент готовит яйцо только рядом с игроком
+	WALK_SLOT_DELAY   = 0.4,         -- пауза у каждого слота, сек
+	WALK_MAX_SLOTS    = 70,          -- сколько слотов обходить за один скан
 	SHOW_GUI          = true,        -- небольшое окно со статусом
 	AUTO_RELOAD       = true,        -- queue_on_teleport: перезапуск после телепорта
 	SCRIPT_URL        = "https://raw.githubusercontent.com/karakodil/keyskoziks/egg-scanner/StealAnEggScanner.lua",
@@ -96,7 +99,7 @@ local CONFIG = {
 --=========================== СЛУЖБЫ И ХЕЛПЕРЫ ===============================--
 
 local PREFIX  = "[EggScanner]"
-local VERSION = "v41-worldonly"
+local VERSION = "v43-walk"
 
 local Players           = game:GetService("Players")
 local TeleportService   = game:GetService("TeleportService")
@@ -1317,6 +1320,49 @@ local function streamAllAreas()
 	return count
 end
 
+-- Обход слотов: подходим к каждому, чтобы клиент "приготовил" яйцо
+local function collectEggsByWalking()
+	local slots = workspace:FindFirstChild("AreaEggSlotsClient")
+	if not slots then
+		return nil
+	end
+
+	local character = LocalPlayer and LocalPlayer.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	if not root then
+		return nil
+	end
+
+	local results = {}
+	local children = slots:GetChildren()
+	local visited = 0
+
+	for index = 1, math.min(#children, CONFIG.WALK_MAX_SLOTS) do
+		local slot = children[index]
+
+		local okPosition, position = pcall(function()
+			return slot:GetPivot().Position
+		end)
+
+		if okPosition and position then
+			pcall(function()
+				root.CFrame = CFrame.new(position + Vector3.new(0, 4, 0))
+			end)
+			task.wait(CONFIG.WALK_SLOT_DELAY)
+
+			local entry = buildEggEntry(slot)
+			if entry then
+				entry.walked = true
+				results[#results + 1] = entry
+			end
+
+			visited = visited + 1
+		end
+	end
+
+	return results, visited
+end
+
 local function scanServer()
 	local streamed = streamAllAreas()
 	if streamed > 0 then
@@ -1324,7 +1370,21 @@ local function scanServer()
 		task.wait(1)
 	end
 
-	local eggs, truncated, scanned = collectEggs()
+	local eggs, truncated, scanned
+
+	if CONFIG.WALK_SLOTS then
+		local walkedEggs, visited = collectEggsByWalking()
+		if walkedEggs then
+			eggs = walkedEggs
+			truncated = false
+			scanned = visited or 0
+			log(string.format("Обход слотов: %d, найдено яиц: %d", scanned, #eggs))
+		end
+	end
+
+	if not eggs then
+		eggs, truncated, scanned = collectEggs()
+	end
 
 	local byName = {}
 	for _, egg in ipairs(eggs) do
@@ -2966,15 +3026,77 @@ local function dumpNearby(lines, radius)
 						end
 					end
 
-					lines[#lines + 1] = string.format("%s (%s) | %.0f studs | %s",
-						shortPath(descendant, 55), descendant.ClassName, distance,
-						table.concat(parts, ", "):sub(1, 150))
+					local extra = {}
+					if descendant:IsA("Model") then
+						local kids = descendant:GetChildren()
+						for kidIndex = 1, math.min(#kids, 6) do
+							extra[#extra + 1] = tostring(kids[kidIndex].Name) .. "(" .. kids[kidIndex].ClassName .. ")"
+						end
+					elseif descendant:IsA("MeshPart") then
+						local okMesh, meshId = pcall(function()
+							return descendant.MeshId
+						end)
+						if okMesh and meshId then
+							extra[#extra + 1] = "mesh=" .. tostring(meshId):sub(-18)
+						end
+					end
+
+					lines[#lines + 1] = string.format("%s (%s) | %.0f studs | %s | %s",
+						shortPath(descendant, 50), descendant.ClassName, distance,
+						table.concat(parts, ", "):sub(1, 110),
+						table.concat(extra, ", "):sub(1, 110))
 				end
 			end
 		end
 	end
 
 	lines[#lines + 1] = "рядом объектов: " .. found
+end
+
+-- Гнёзда по всем зонам: что внутри
+local function dumpNests(lines)
+	local world = workspace:FindFirstChild("World")
+	local areasFolder = world and world:FindFirstChild("Areas")
+	local guardAreas = areasFolder and areasFolder:FindFirstChild("GuardAreas")
+
+	if not guardAreas then
+		lines[#lines + 1] = "нет GuardAreas"
+		return
+	end
+
+	for _, area in ipairs(guardAreas:GetChildren()) do
+		local nests = area:FindFirstChild("Nests")
+		if nests then
+			local nestList = nests:GetChildren()
+			lines[#lines + 1] = string.format("%s | гнёзд: %d", tostring(area.Name), #nestList)
+
+			for index = 1, math.min(#nestList, 6) do
+				local nest = nestList[index]
+
+				local parts = {}
+				local okAttrs, attributes = pcall(function()
+					return nest:GetAttributes()
+				end)
+				if okAttrs and type(attributes) == "table" then
+					for name, value in pairs(attributes) do
+						parts[#parts + 1] = tostring(name) .. "=" .. tostring(value):sub(1, 22)
+					end
+				end
+
+				lines[#lines + 1] = string.format("  %s (%s) | детей %d | %s",
+					tostring(nest.Name):sub(1, 24), nest.ClassName, #(nest:GetChildren()),
+					table.concat(parts, ", "):sub(1, 140))
+
+				for childIndex, child in ipairs(nest:GetChildren()) do
+					if childIndex > 4 then
+						break
+					end
+					lines[#lines + 1] = string.format("    %s (%s) | детей %d",
+						tostring(child.Name):sub(1, 24), child.ClassName, #(child:GetChildren()))
+				end
+			end
+		end
+	end
 end
 
 local function collectEggInspect()
@@ -3008,6 +3130,10 @@ local function collectEggInspect()
 	end)
 
 	add("")
+	add("[ГНЁЗДА]")
+	dumpNests(lines)
+	add("")
+
 	add("[РЯДОМ] (радиус 40)")
 	dumpNearby(lines, 40)
 	add("")
