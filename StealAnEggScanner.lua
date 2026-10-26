@@ -95,7 +95,7 @@ local CONFIG = {
 --=========================== СЛУЖБЫ И ХЕЛПЕРЫ ===============================--
 
 local PREFIX  = "[EggScanner]"
-local VERSION = "v25-zone"
+local VERSION = "v26-slottext"
 
 local Players           = game:GetService("Players")
 local TeleportService   = game:GetService("TeleportService")
@@ -2543,9 +2543,40 @@ local function dumpSlots(lines)
 			end
 		end
 
+		local okPosition, position = pcall(function()
+			return slot.Position
+		end)
+		if okPosition and position then
+			local okXYZ = pcall(function()
+				parts[#parts + 1] = string.format("pos=%.0f,%.0f,%.0f", position.X, position.Y, position.Z)
+			end)
+			if not okXYZ then
+				-- не Vector3, пропускаем
+			end
+		end
+
 		lines[#lines + 1] = string.format("%d) %s | детей %d | %s",
 			index, tostring(slot.Name):sub(1, 20), #(slot:GetChildren()),
 			table.concat(parts, ", "):sub(1, 170))
+
+		-- тексты внутри слота (BillboardGui/TextLabel) — часто там имя/цена яйца
+		local texts = {}
+		local budget = 4
+		for _, descendant in ipairs(slot:GetDescendants()) do
+			if budget <= 0 then
+				break
+			end
+			if descendant:IsA("TextLabel") or descendant:IsA("TextButton") then
+				local text = tostring(descendant.Text):gsub("\n", " ")
+				if text ~= "" then
+					budget = budget - 1
+					texts[#texts + 1] = text:sub(1, 36)
+				end
+			end
+		end
+		if #texts > 0 then
+			lines[#lines + 1] = "   текст: " .. table.concat(texts, " | ")
+		end
 	end
 end
 
