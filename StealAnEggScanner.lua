@@ -95,7 +95,7 @@ local CONFIG = {
 --=========================== СЛУЖБЫ И ХЕЛПЕРЫ ===============================--
 
 local PREFIX  = "[EggScanner]"
-local VERSION = "v36-short"
+local VERSION = "v38-sources"
 
 local Players           = game:GetService("Players")
 local TeleportService   = game:GetService("TeleportService")
@@ -1100,6 +1100,7 @@ local function buildEggEntry(instance)
 	local value  = readStat(instance, VALUE_ATTRS)
 	local uid, uidName = getEggUid(instance)
 	local pet = getEggPetName(instance)
+	local source = pet and "attr" or nil
 	local petConfig = nil
 
 	if not pet then
@@ -1108,6 +1109,7 @@ local function buildEggEntry(instance)
 		petConfig = key ~= "" and getPetIndex()[key] or nil
 		if petConfig then
 			pet = (type(petConfig) == "table" and petConfig.DisplayName) or instance.Name
+			source = "name"
 		end
 	end
 
@@ -1155,6 +1157,7 @@ local function buildEggEntry(instance)
 		uid      = uid,
 		uidName  = uidName,
 		biome    = biome,
+		source   = source or "other",
 	}
 end
 
@@ -1333,6 +1336,7 @@ local function scanServer()
 				uidName  = egg.uidName,
 				pet      = egg.pet,
 				petField = egg.petField,
+				source   = egg.source,
 			}
 		end
 	end
@@ -2895,6 +2899,74 @@ local function dumpPlacedEggs(lines)
 	end
 end
 
+-- Объекты рядом с персонажем: что за яйцо перед нами
+local function dumpNearby(lines, radius)
+	local character = LocalPlayer and LocalPlayer.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+
+	if not root then
+		lines[#lines + 1] = "нет персонажа/HRP"
+		return
+	end
+
+	local okOrigin, origin = pcall(function()
+		return root.Position
+	end)
+	if not okOrigin or not origin then
+		lines[#lines + 1] = "не прочитать позицию персонажа"
+		return
+	end
+
+	local okDescendants, descendants = pcall(function()
+		return workspace:GetDescendants()
+	end)
+	if not okDescendants or type(descendants) ~= "table" then
+		lines[#lines + 1] = "не прочитать workspace"
+		return
+	end
+
+	local found = 0
+	for _, descendant in ipairs(descendants) do
+		if found >= 25 then
+			break
+		end
+		if descendant ~= root then
+			local okPosition, position = pcall(function()
+				if descendant:IsA("BasePart") then
+					return descendant.Position
+				end
+				return descendant:GetPivot().Position
+			end)
+
+			if okPosition and position then
+				local okDistance, distance = pcall(function()
+					return (position - origin).Magnitude
+				end)
+
+				if okDistance and type(distance) == "number" and distance <= radius then
+					found = found + 1
+
+					local parts = {}
+					local okAttrs, attributes = pcall(function()
+						return descendant:GetAttributes()
+					end)
+					if okAttrs and type(attributes) == "table" then
+						for name, value in pairs(attributes) do
+							parts[#parts + 1] = tostring(name) .. "=" .. tostring(value):sub(1, 24)
+						end
+					end
+
+					lines[#lines + 1] = string.format("%s (%s) | %.0f studs | %s",
+						shortPath(descendant, 55), descendant.ClassName, distance,
+						table.concat(parts, ", "):sub(1, 150))
+				end
+			end
+		end
+	end
+
+	lines[#lines + 1] = "рядом объектов: " .. found
+end
+
 local function collectEggInspect()
 	local lines = {}
 	local function add(...)
@@ -2926,6 +2998,10 @@ local function collectEggInspect()
 	end)
 
 	add("")
+	add("[РЯДОМ] (радиус 40)")
+	dumpNearby(lines, 40)
+	add("")
+
 	add("[ЯЙЦА]")
 	for index = 1, math.min(12, #list) do
 		local egg = list[index]
@@ -3233,10 +3309,19 @@ local function main()
 
 			local best, types, truncated, scanned, allEggs, eggCount, ranked, unknownEggs = scanServer()
 
+			local liveEggs, namedEggs = 0, 0
+			for _, egg in ipairs(allEggs or {}) do
+				if egg.source == "name" then
+					namedEggs = namedEggs + 1
+				else
+					liveEggs = liveEggs + 1
+				end
+			end
+
 			local hash = eggFingerprint(allEggs or {})
 			addLog(string.format(
-				"Сервер %s | объектов %d | яиц %d (без данных %d) | типов %d | хэш %s",
-				tostring(game.JobId):sub(1, 8), scanned, eggCount or 0, unknownEggs or 0, types, hash
+				"Сервер %s | объектов %d | яиц %d (живых %d, по имени %d) | типов %d | хэш %s",
+				tostring(game.JobId):sub(1, 8), scanned, eggCount or 0, liveEggs, namedEggs, types, hash
 			))
 
 			local biomesSeen, biomeList = {}, {}
