@@ -95,7 +95,7 @@ local CONFIG = {
 --=========================== СЛУЖБЫ И ХЕЛПЕРЫ ===============================--
 
 local PREFIX  = "[EggScanner]"
-local VERSION = "v26-slottext"
+local VERSION = "v27-modules"
 
 local Players           = game:GetService("Players")
 local TeleportService   = game:GetService("TeleportService")
@@ -2583,6 +2583,78 @@ local function dumpSlots(lines)
 	end
 end
 
+-- Атрибуты объекта одной строкой
+local function dumpAttributes(lines, label, instance)
+	local ok, attributes = pcall(function()
+		return instance:GetAttributes()
+	end)
+	if not ok or type(attributes) ~= "table" then
+		return
+	end
+
+	local parts = {}
+	for name, value in pairs(attributes) do
+		parts[#parts + 1] = tostring(name) .. "=" .. tostring(value):sub(1, 30)
+	end
+
+	lines[#lines + 1] = label .. ": " .. table.concat(parts, ", "):sub(1, 700)
+end
+
+-- Модули ReplicatedStorage: список + require "яичных"
+local function dumpModules(lines)
+	if not ReplicatedStorage then
+		lines[#lines + 1] = "нет ReplicatedStorage"
+		return
+	end
+
+	local modules = {}
+	local stack = { ReplicatedStorage }
+	local scanned = 0
+
+	while #stack > 0 and #modules < 60 do
+		local instance = table.remove(stack)
+		scanned = scanned + 1
+		if scanned > 20000 then
+			break
+		end
+
+		if instance ~= ReplicatedStorage and instance:IsA("ModuleScript") then
+			modules[#modules + 1] = instance
+		else
+			for _, child in ipairs(instance:GetChildren()) do
+				stack[#stack + 1] = child
+			end
+		end
+	end
+
+	lines[#lines + 1] = string.format("модулей найдено: %d", #modules)
+
+	local required = 0
+	for _, module in ipairs(modules) do
+		local lower = string.lower(tostring(module.Name))
+		local interesting = string.find(lower, "egg", 1, true)
+			or string.find(lower, "slot", 1, true)
+			or string.find(lower, "area", 1, true)
+			or string.find(lower, "pet", 1, true)
+
+		if interesting and required < 5 then
+			required = required + 1
+			lines[#lines + 1] = "[require] " .. shortPath(module, 70)
+
+			local ok, result = pcall(function()
+				return require(module)
+			end)
+			if ok then
+				lines[#lines + 1] = "  " .. describeValue(result, 3, { left = 80 }, {}):sub(1, 1800)
+			else
+				lines[#lines + 1] = "  error: " .. tostring(result):sub(1, 80)
+			end
+		else
+			lines[#lines + 1] = "  " .. shortPath(module, 70)
+		end
+	end
+end
+
 local function collectEggInspect()
 	local lines = {}
 	local function add(...)
@@ -2666,6 +2738,14 @@ local function collectEggInspect()
 			end
 		end
 	end
+	add("")
+
+	add("[WORKSPACE АТРИБУТЫ]")
+	dumpAttributes(lines, "workspace", workspace)
+	add("")
+
+	add("[МОДУЛИ]")
+	dumpModules(lines)
 	add("")
 
 	add("[CONFIG]")
