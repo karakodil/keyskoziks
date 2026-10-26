@@ -95,7 +95,7 @@ local CONFIG = {
 --=========================== СЛУЖБЫ И ХЕЛПЕРЫ ===============================--
 
 local PREFIX  = "[EggScanner]"
-local VERSION = "v35-exact"
+local VERSION = "v36-short"
 
 local Players           = game:GetService("Players")
 local TeleportService   = game:GetService("TeleportService")
@@ -1374,17 +1374,44 @@ local function isValuable(egg)
 	return metric >= CONFIG.THRESHOLD, metric
 end
 
--- 1500000000 -> "1 500 000 000" (точная сумма с разрядами)
+-- 25600000 -> "25.6M", 273000000 -> "273M", 1250000000 -> "1.25B"
 local function formatNumber(number)
 	if type(number) ~= "number" or number ~= number then
 		return "?"
 	end
 
 	local negative = number < 0
-	local value = math.floor(math.abs(number))
+	number = math.abs(number)
 
-	local text = tostring(value):reverse():gsub("(%d%d%d)", "%1 "):reverse()
-	text = text:gsub("^%s+", ""):gsub("%s+$", "")
+	local units = {
+		{ 1e15, "Q" }, { 1e12, "T" }, { 1e9, "B" }, { 1e6, "M" }, { 1e3, "K" },
+	}
+
+	local text
+	for _, unit in ipairs(units) do
+		if number >= unit[1] then
+			local scaled = number / unit[1]
+
+			if scaled >= 100 then
+				text = string.format("%.0f", scaled)
+			elseif scaled >= 10 then
+				text = string.format("%.1f", scaled)
+			else
+				text = string.format("%.2f", scaled)
+			end
+
+			if string.find(text, ".", 1, true) then
+				text = text:gsub("0+$", ""):gsub("%." .. "$", "")
+			end
+
+			text = text .. unit[2]
+			break
+		end
+	end
+
+	if not text then
+		text = string.format("%.0f", number)
+	end
 
 	if negative then
 		text = "-" .. text
