@@ -1168,6 +1168,7 @@ end
 local function scanServer()
 	local streamed = streamAllAreas()
 	if streamed > 0 then
+		log("Стриминг: запрошено зон " .. streamed)
 		task.wait(1)
 	end
 
