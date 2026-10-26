@@ -95,7 +95,7 @@ local CONFIG = {
 --=========================== СЛУЖБЫ И ХЕЛПЕРЫ ===============================--
 
 local PREFIX  = "[EggScanner]"
-local VERSION = "v31-petname-income"
+local VERSION = "v32-counts"
 
 local Players           = game:GetService("Players")
 local TeleportService   = game:GetService("TeleportService")
@@ -1338,7 +1338,14 @@ local function scanServer()
 		return a.score > b.score
 	end)
 
-	return ranked[1], #ranked, truncated, scanned, eggs, #eggs, ranked
+	local unknown = 0
+	for _, egg in ipairs(eggs) do
+		if (egg.income or 0) <= 0 then
+			unknown = unknown + 1
+		end
+	end
+
+	return ranked[1], #ranked, truncated, scanned, eggs, #eggs, ranked, unknown
 end
 
 -- Прошло ли яйцо порог (с учётом THRESHOLD_MODE)
@@ -3139,12 +3146,12 @@ local function main()
 
 			setStatus("Сканирование сервера...")
 
-			local best, types, truncated, scanned, allEggs, eggCount, ranked = scanServer()
+			local best, types, truncated, scanned, allEggs, eggCount, ranked, unknownEggs = scanServer()
 
 			local hash = eggFingerprint(allEggs or {})
 			addLog(string.format(
-				"Сервер %s | объектов %d | яиц %d | типов %d | хэш %s",
-				tostring(game.JobId):sub(1, 8), scanned, eggCount or 0, types, hash
+				"Сервер %s | объектов %d | яиц %d (без данных %d) | типов %d | хэш %s",
+				tostring(game.JobId):sub(1, 8), scanned, eggCount or 0, unknownEggs or 0, types, hash
 			))
 
 			local biomesSeen, biomeList = {}, {}
