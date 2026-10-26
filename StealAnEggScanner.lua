@@ -94,7 +94,7 @@ local CONFIG = {
 --=========================== СЛУЖБЫ И ХЕЛПЕРЫ ===============================--
 
 local PREFIX  = "[EggScanner]"
-local VERSION = "v17-inspect"
+local VERSION = "v18-area"
 
 local Players           = game:GetService("Players")
 local TeleportService   = game:GetService("TeleportService")
@@ -923,6 +923,36 @@ local function getPetIncome(petName)
 	return value, field
 end
 
+-- Питомец -> локация по Areas.Directory[*].DropTable
+local petAreaCache = nil
+
+local function getPetAreaIndex()
+	if petAreaCache then
+		return petAreaCache
+	end
+
+	local index = {}
+	local areas = requireModule and requireModule("Areas")
+	if type(areas) == "table" and type(areas.Directory) == "table" then
+		for areaName, config in pairs(areas.Directory) do
+			if type(config) == "table" and type(config.DropTable) == "table" then
+				for _, entry in pairs(config.DropTable) do
+					local petName = entry
+					if type(entry) == "table" then
+						petName = entry[1]
+					end
+					if type(petName) == "string" then
+						index[normalizeKey(petName)] = tostring(areaName)
+					end
+				end
+			end
+		end
+	end
+
+	petAreaCache = index
+	return index
+end
+
 -- Собираем всё про яйцо: атрибуты, UID, биом, питомца и его доход
 local function buildEggEntry(instance)
 	local income = readStat(instance, INCOME_ATTRS)
@@ -945,6 +975,14 @@ local function buildEggEntry(instance)
 		displayName = pet
 	end
 
+	local biome = getBiomeName(instance)
+	if pet then
+		local petArea = getPetAreaIndex()[normalizeKey(pet)]
+		if petArea then
+			biome = petArea
+		end
+	end
+
 	return {
 		instance = instance,
 		name     = displayName,
@@ -954,7 +992,7 @@ local function buildEggEntry(instance)
 		value    = value or 0,
 		uid      = uid,
 		uidName  = uidName,
-		biome    = getBiomeName(instance),
+		biome    = biome,
 	}
 end
 
@@ -2261,6 +2299,22 @@ local function collectEggInspect()
 		describeInstance(first.instance, 1, lines, { left = 30 }, 2)
 		add("")
 	end
+
+	add("[КОНТЕЙНЕРЫ ЯИЦ]")
+	for _, child in ipairs(workspace:GetChildren()) do
+		if isEggName(child.Name) then
+			add("%s (%s) | детей %d", tostring(child.Name), child.ClassName, #(child:GetChildren()))
+			local shown = 0
+			for _, sub in ipairs(child:GetChildren()) do
+				if shown >= 8 then
+					break
+				end
+				shown = shown + 1
+				add("  %s (%s) | детей %d", tostring(sub.Name), sub.ClassName, #(sub:GetChildren()))
+			end
+		end
+	end
+	add("")
 
 	add("[CONFIG]")
 	dumpConfig(lines)
