@@ -100,7 +100,7 @@ local CONFIG = {
 --=========================== СЛУЖБЫ И ХЕЛПЕРЫ ===============================--
 
 local PREFIX  = "[EggScanner]"
-local VERSION = "v53-worldtop"
+local VERSION = "v54-mesh"
 
 local Players           = game:GetService("Players")
 local TeleportService   = game:GetService("TeleportService")
@@ -1326,6 +1326,106 @@ local function findPetInBlob(blob)
 	return nil
 end
 
+-- Индекс mesh-id -> питомец, собранный из шаблонов яиц (New*Eggs)
+local meshPetCache = nil
+
+local function petNameOfTemplate(instance)
+	local pet = getEggPetName(instance)
+	if pet then
+		return pet
+	end
+
+	local key = normalizeKey(instance.Name)
+	key = key:gsub("egg$", "")
+	if #key >= 4 and getPetIndex()[key] then
+		return petOriginalKeys[key] or key
+	end
+
+	return nil
+end
+
+local function collectMeshes(instance, pet, index)
+	local okDescendants, descendants = pcall(function()
+		return instance:GetDescendants()
+	end)
+	if not okDescendants or type(descendants) ~= "table" then
+		return
+	end
+
+	for _, descendant in ipairs(descendants) do
+		if descendant:IsA("MeshPart") then
+			local okMesh, meshId = pcall(function()
+				return descendant.MeshId
+			end)
+			if okMesh and type(meshId) == "string" then
+				local id = meshId:match("(%d+)")
+				if id then
+					index[id] = pet
+				end
+			end
+		end
+	end
+end
+
+local function getMeshPetIndex()
+	if meshPetCache then
+		return meshPetCache
+	end
+
+	local index = {}
+
+	local function scanRoot(root)
+		if not root then
+			return
+		end
+
+		for _, child in ipairs(root:GetChildren()) do
+			local lower = string.lower(tostring(child.Name))
+			if string.sub(lower, -4) == "eggs" or string.find(lower, "neweggs", 1, true) then
+				for _, template in ipairs(child:GetChildren()) do
+					local pet = petNameOfTemplate(template)
+					if pet then
+						collectMeshes(template, pet, index)
+					end
+				end
+			end
+		end
+	end
+
+	scanRoot(workspace)
+	scanRoot(ReplicatedStorage)
+
+	meshPetCache = index
+	return index
+end
+
+-- определяем пета по мешам конкретного яйца
+local function petByMeshes(instance)
+	local index = getMeshPetIndex()
+	local okDescendants, descendants = pcall(function()
+		return instance:GetDescendants()
+	end)
+	if not okDescendants or type(descendants) ~= "table" then
+		return nil
+	end
+
+	for _, descendant in ipairs(descendants) do
+		if descendant:IsA("MeshPart") then
+			local okMesh, meshId = pcall(function()
+				return descendant.MeshId
+			end)
+			if okMesh and type(meshId) == "string" then
+				local id = meshId:match("(%d+)")
+				if id and index[id] then
+					return index[id]
+				end
+			end
+		end
+	end
+
+	return nil
+end
+
 -- Собираем всё про яйцо: атрибуты, UID, биом, питомца и его доход
 local function buildEggEntry(instance)
 	-- контейнеры (EggPoint, EggSpawn...) не считаем яйцом, иначе не зайдём внутрь
@@ -1347,6 +1447,15 @@ local function buildEggEntry(instance)
 		if petConfig then
 			pet = (type(petConfig) == "table" and petConfig.DisplayName) or instance.Name
 			source = "name"
+		end
+	end
+
+	-- пет по mesh-id (у каждого пета свой меш яйца)
+	if not pet then
+		local meshPet = petByMeshes(instance)
+		if meshPet then
+			pet = meshPet
+			source = source or "mesh"
 		end
 	end
 
@@ -3471,6 +3580,44 @@ local function dumpSmartPrompts(lines)
 	end
 end
 
+-- Проверка индекса mesh -> пет
+local function dumpMeshIndex(lines)
+	local index = getMeshPetIndex()
+	local count = 0
+	for _ in pairs(index) do
+		count = count + 1
+	end
+
+	lines[#lines + 1] = "mesh->pet записей: " .. count
+
+	local shown = 0
+	for id, pet in pairs(index) do
+		if shown >= 8 then
+			break
+		end
+		shown = shown + 1
+		lines[#lines + 1] = string.format("  %s -> %s", tostring(id), tostring(pet))
+	end
+
+	local slots = workspace:FindFirstChild("AreaEggSlotsClient")
+	if slots then
+		local checked = 0
+		for _, slot in ipairs(slots:GetChildren()) do
+			if checked >= 3 then
+				break
+			end
+			local okPivot, pivot = pcall(function()
+				return slot:GetPivot().Position
+			end)
+			if okPivot and pivot and pivot.X < 700 then
+				checked = checked + 1
+				lines[#lines + 1] = string.format("спавн-яйцо %s -> %s",
+					tostring(slot.Name):sub(1, 40), tostring(petByMeshes(slot)))
+			end
+		end
+	end
+end
+
 local function collectEggInspect()
 	local lines = {}
 	local function add(...)
@@ -3487,6 +3634,10 @@ local function collectEggInspect()
 	-- сначала самое важное: модули (EggCmds) и слоты
 	add("[СПАВН-ЯЙЦО]")
 	dumpSpawnEgg(lines)
+	add("")
+
+	add("[MESH]")
+	dumpMeshIndex(lines)
 	add("")
 
 	add("[SMART PROMPTS]")
