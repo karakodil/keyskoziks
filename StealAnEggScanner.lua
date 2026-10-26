@@ -90,7 +90,7 @@ local CONFIG = {
 --=========================== СЛУЖБЫ И ХЕЛПЕРЫ ===============================--
 
 local PREFIX  = "[EggScanner]"
-local VERSION = "v7-paste"
+local VERSION = "v8-config"
 
 local Players           = game:GetService("Players")
 local TeleportService   = game:GetService("TeleportService")
@@ -1512,7 +1512,7 @@ local function describeValue(value, depth, budget, seen)
 	return tostring(value)
 end
 
-local function describeInstance(instance, depth, lines, budget)
+local function describeInstance(instance, depth, lines, budget, maxDepth)
 	if budget.left <= 0 then
 		return
 	end
@@ -1550,7 +1550,7 @@ local function describeInstance(instance, depth, lines, budget)
 
 	lines[#lines + 1] = label
 
-	if depth >= 4 then
+	if depth >= (maxDepth or 4) then
 		return
 	end
 
@@ -1559,19 +1559,21 @@ local function describeInstance(instance, depth, lines, budget)
 	end
 end
 
--- Ищем яйца-образцы: имя содержит egg, это не Folder, и у него есть дети
+-- Слова, по которым объект считаем НЕ яйцом, а обвязкой
+local EGG_SKIP_WORDS = {
+	"holder", "glow", "nest", "spawn", "point", "spot",
+	"fitbounds", "area", "carry", "prompt", "bounds",
+}
+
+-- Ищем настоящие яйца: под WorldEggs/EggNests, без слов-обвязок
 local function findEggSamples(limit)
-	local samples = {}
+	local candidates = {}
 	local stack = { workspace }
 	local scanned = 0
 
-	while #stack > 0 and #samples < limit do
+	while #stack > 0 and scanned < 80000 do
 		local instance = table.remove(stack)
 		scanned = scanned + 1
-
-		if scanned > 80000 then
-			break
-		end
 
 		local matched = instance ~= workspace
 			and instance.Parent ~= nil
@@ -1579,13 +1581,44 @@ local function findEggSamples(limit)
 			and not instance:IsA("Folder")
 
 		if matched then
-			local children = instance:GetChildren()
-			if #children > 0 then
-				samples[#samples + 1] = instance
+			local lower = string.lower(instance.Name)
+			local skipped = false
+			for _, word in ipairs(EGG_SKIP_WORDS) do
+				if string.find(lower, word, 1, true) then
+					skipped = true
+					break
+				end
 			end
-		end
 
-		if not matched then
+			if not skipped then
+				local score = 0
+				if instance.Parent and isEggName(instance.Parent.Name) then
+					score = score + 3
+				end
+				if instance:IsA("Model") then
+					score = score + 1
+				end
+
+				local okAttrs, attributes = pcall(function()
+					return instance:GetAttributes()
+				end)
+				local attributeCount = 0
+				if okAttrs and type(attributes) == "table" then
+					for _ in pairs(attributes) do
+						attributeCount = attributeCount + 1
+					end
+				end
+				if attributeCount > 0 then
+					score = score + 1
+				end
+
+				candidates[#candidates + 1] = {
+					instance = instance,
+					score = score,
+					attributes = attributeCount,
+				}
+			end
+		else
 			for _, child in ipairs(instance:GetChildren()) do
 				stack[#stack + 1] = child
 			end
@@ -1596,37 +1629,153 @@ local function findEggSamples(limit)
 		end
 	end
 
-	return samples, scanned
+	table.sort(candidates, function(a, b)
+		if a.score ~= b.score then
+			return a.score > b.score
+		end
+		return a.attributes > b.attributes
+	end)
+
+	local samples = {}
+	for index = 1, math.min(limit, #candidates) do
+		samples[#samples + 1] = candidates[index].instance
+	end
+
+	return samples, scanned, candidates
 end
 
--- Пробуем выполнить конфиг-модули и показать, что внутри
-local function dumpDataModules(lines)
+-- Достаём модуль из ReplicatedStorage.Data (require в pcall)
+local function requireModule(name)
 	if not ReplicatedStorage then
-		lines[#lines + 1] = "нет ReplicatedStorage"
-		return
+		return nil
 	end
 
 	local data = ReplicatedStorage:FindFirstChild("Data")
-	if not data then
-		lines[#lines + 1] = "нет папки ReplicatedStorage.Data"
-		return
+	local module = data and data:FindFirstChild(name)
+	if not module or not module:IsA("ModuleScript") then
+		return nil
 	end
 
-	for _, child in ipairs(data:GetChildren()) do
-		if child:IsA("ModuleScript") then
-			lines[#lines + 1] = "[Module] " .. child.Name
+	local ok, result = pcall(function()
+		return require(module)
+	end)
 
-			local ok, result = pcall(function()
-				return require(child)
-			end)
+	if ok then
+		return result
+	end
+	return nil
+end
 
-			if ok then
-				local budget = { left = 45 }
-				lines[#lines + 1] = "  " .. describeValue(result, 2, budget, {}):sub(1, 1500)
-			else
-				lines[#lines + 1] = "  require error: " .. tostring(result):sub(1, 90)
+local function sortedKeys(tbl)
+	local keys = {}
+	for key in pairs(tbl) do
+		keys[#keys + 1] = tostring(key)
+	end
+	table.sort(keys)
+	return keys
+end
+
+-- Конфиги игры: ищем, где лежат цены/доходы яиц
+local function dumpConfig(lines)
+	local assets   = requireModule("Assets")
+	local areas    = requireModule("Areas")
+	local limited  = requireModule("LimitedEgg")
+	local rarity   = requireModule("Rarity")
+	local currency = requireModule("Currency")
+	local products = requireModule("Products")
+
+	-- 1) LimitedEgg — самый вероятный конфиг яиц
+	lines[#lines + 1] = "[LimitedEgg]"
+	if limited then
+		lines[#lines + 1] = "  " .. describeValue(limited, 4, { left = 200 }, {}):sub(1, 2600)
+	else
+		lines[#lines + 1] = "  require failed"
+	end
+	lines[#lines + 1] = ""
+
+	-- 2) Areas — биомы трека
+	lines[#lines + 1] = "[Areas]"
+	if type(areas) == "table" and type(areas.Directory) == "table" then
+		local keys = sortedKeys(areas.Directory)
+		lines[#lines + 1] = string.format("  биомы (%d): %s",
+			#keys, table.concat(keys, ", "):sub(1, 700))
+		if keys[1] then
+			lines[#lines + 1] = "  " .. keys[1] .. ": "
+				.. describeValue(areas.Directory[keys[1]], 3, { left = 60 }, {}):sub(1, 800)
+		end
+	else
+		lines[#lines + 1] = "  нет Directory"
+	end
+	lines[#lines + 1] = ""
+
+	-- 3) Assets: ключи с "egg" + пример
+	lines[#lines + 1] = "[Assets.Directory]"
+	if type(assets) == "table" and type(assets.Directory) == "table" then
+		local eggKeys, total = {}, 0
+		for key in pairs(assets.Directory) do
+			total = total + 1
+			if string.find(string.lower(tostring(key)), "egg", 1, true) then
+				eggKeys[#eggKeys + 1] = tostring(key)
 			end
 		end
+		table.sort(eggKeys)
+
+		lines[#lines + 1] = string.format("  всего %d, с 'egg' в имени: %d", total, #eggKeys)
+		if #eggKeys > 0 then
+			lines[#lines + 1] = "  ключи: " .. table.concat(eggKeys, ", "):sub(1, 600)
+			lines[#lines + 1] = "  " .. eggKeys[1] .. ": "
+				.. describeValue(assets.Directory[eggKeys[1]], 3, { left = 120 }, {}):sub(1, 1400)
+		end
+	else
+		lines[#lines + 1] = "  нет Directory"
+	end
+	lines[#lines + 1] = ""
+
+	-- 4) Rarity
+	lines[#lines + 1] = "[Rarity]"
+	if type(rarity) == "table" and type(rarity.Rarities) == "table" then
+		local keys = sortedKeys(rarity.Rarities)
+		lines[#lines + 1] = "  " .. table.concat(keys, ", "):sub(1, 500)
+		if keys[1] then
+			lines[#lines + 1] = "  " .. keys[1] .. ": "
+				.. describeValue(rarity.Rarities[keys[1]], 3, { left = 40 }, {}):sub(1, 600)
+		end
+	else
+		lines[#lines + 1] = "  нет Rarities"
+	end
+	lines[#lines + 1] = ""
+
+	-- 5) Currency
+	lines[#lines + 1] = "[Currency]"
+	if type(currency) == "table" and type(currency.Directory) == "table" then
+		local keys = sortedKeys(currency.Directory)
+		lines[#lines + 1] = "  " .. table.concat(keys, ", "):sub(1, 300)
+		if keys[1] then
+			lines[#lines + 1] = "  " .. keys[1] .. ": "
+				.. describeValue(currency.Directory[keys[1]], 3, { left = 40 }, {}):sub(1, 600)
+		end
+	else
+		lines[#lines + 1] = "  нет Directory"
+	end
+	lines[#lines + 1] = ""
+
+	-- 6) Products, в которых есть Egg
+	lines[#lines + 1] = "[Products с Egg]"
+	if type(products) == "table" and type(products.Directory) == "table" then
+		local eggKeys = {}
+		for key in pairs(products.Directory) do
+			if string.find(string.lower(tostring(key)), "egg", 1, true) then
+				eggKeys[#eggKeys + 1] = tostring(key)
+			end
+		end
+		table.sort(eggKeys)
+		lines[#lines + 1] = "  " .. table.concat(eggKeys, ", "):sub(1, 700)
+		if eggKeys[1] then
+			lines[#lines + 1] = "  " .. eggKeys[1] .. ": "
+				.. describeValue(products.Directory[eggKeys[1]], 2, { left = 40 }, {}):sub(1, 700)
+		end
+	else
+		lines[#lines + 1] = "  нет Directory"
 	end
 end
 
@@ -1637,9 +1786,23 @@ local function collectEggInspect()
 	end
 
 	add("EGG INSPECT %s | Job %s", VERSION, tostring(game.JobId):sub(1, 8))
+	add("")
 
-	local samples, scanned = findEggSamples(2)
-	add("просмотрено объектов: %d | найдено образцов: %d", scanned, #samples)
+	local samples, scanned, candidates = findEggSamples(1)
+	add("просмотрено объектов: %d | яиц-кандидатов: %d", scanned, #candidates)
+	add("")
+
+	-- конфиг идёт ПЕРВЫМ, чтобы не обрезался
+	add("[CONFIG]")
+	dumpConfig(lines)
+	add("")
+
+	add("[СПИСОК ЯИЦ]")
+	for index = 1, math.min(12, #candidates) do
+		local entry = candidates[index]
+		add("%d) %s | атрибутов: %d | score: %d",
+			index, shortPath(entry.instance, 80), entry.attributes, entry.score)
+	end
 	add("")
 
 	for index, egg in ipairs(samples) do
@@ -1653,35 +1816,17 @@ local function collectEggInspect()
 			for name, value in pairs(attributes) do
 				parts[#parts + 1] = tostring(name) .. "=" .. tostring(value):sub(1, 30)
 			end
-			add("атрибуты (%d): %s", #parts, table.concat(parts, ", "):sub(1, 800))
+			add("атрибуты (%d): %s", #parts, table.concat(parts, ", "):sub(1, 900))
 		end
 
 		add("дерево:")
-		describeInstance(egg, 1, lines, { left = 80 })
+		describeInstance(egg, 1, lines, { left = 50 }, 3)
 		add("")
 	end
 
-	add("[ReplicatedStorage.Data]")
-	dumpDataModules(lines)
-	add("")
-
-	if ReplicatedStorage then
-		local mutations = ReplicatedStorage:FindFirstChild("Mutations")
-		if mutations then
-			local names = {}
-			for _, child in ipairs(mutations:GetChildren()) do
-				names[#names + 1] = child.Name
-				if #names >= 12 then
-					break
-				end
-			end
-			add("[Mutations] %s", table.concat(names, ", "):sub(1, 300))
-		end
-	end
-
 	local text = table.concat(lines, "\n")
-	if #text > 12000 then
-		text = text:sub(1, 12000) .. "\n... (обрезано)"
+	if #text > 20000 then
+		text = text:sub(1, 20000) .. "\n... (обрезано)"
 	end
 
 	return text, #samples
