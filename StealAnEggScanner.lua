@@ -94,7 +94,7 @@ local CONFIG = {
 --=========================== СЛУЖБЫ И ХЕЛПЕРЫ ===============================--
 
 local PREFIX  = "[EggScanner]"
-local VERSION = "v16-petname"
+local VERSION = "v17-inspect"
 
 local Players           = game:GetService("Players")
 local TeleportService   = game:GetService("TeleportService")
@@ -709,6 +709,8 @@ end
 -- Биом: <X>Dimension, GuardAreas.<Area> или имя контейнера (NewEnchantedEggs)
 local function getBiomeName(instance)
 	local node = instance.Parent
+	local eggContainerName = nil
+
 	for _ = 1, 6 do
 		if not node or node == workspace then
 			break
@@ -733,7 +735,29 @@ local function getBiomeName(instance)
 			return areaName
 		end
 
+		if not eggContainerName and isEggName(node.Name) then
+			eggContainerName = node.Name
+		end
+
 		node = node.Parent
+	end
+
+	-- резерв: атрибуты самого яйца
+	local ok, attributes = pcall(function()
+		return instance:GetAttributes()
+	end)
+	if ok and type(attributes) == "table" then
+		for _, field in ipairs({ "Area", "AreaName", "Biome", "BiomeName", "ZoneName" }) do
+			local value = attributes[field]
+			if type(value) == "string" then
+				local matched = matchAreaName(value)
+				return matched or value
+			end
+		end
+	end
+
+	if eggContainerName then
+		return eggContainerName
 	end
 
 	return "?"
@@ -828,6 +852,33 @@ local function findIncomeField(config)
 	return nil
 end
 
+-- Индекс питомцев без пробелов/знаков: "PetalBeetle" == "Petal Beetle"
+local petIndexCache = nil
+
+local function normalizeKey(text)
+	return (string.lower(tostring(text)):gsub("[^%w]", ""))
+end
+
+local function getPetIndex()
+	if petIndexCache then
+		return petIndexCache
+	end
+
+	local index = {}
+	local assets = requireModule and requireModule("Assets")
+	if type(assets) == "table" and type(assets.Directory) == "table" then
+		for key, value in pairs(assets.Directory) do
+			index[normalizeKey(key)] = value
+			if type(value) == "table" and type(value.DisplayName) == "string" then
+				index[normalizeKey(value.DisplayName)] = value
+			end
+		end
+	end
+
+	petIndexCache = index
+	return index
+end
+
 -- Доход яйца по конфигу питомца (Assets.Directory[pet].BaseConfig)
 local function getPetIncome(petName)
 	if not petName or not requireModule then
@@ -840,6 +891,10 @@ local function getPetIncome(petName)
 	end
 
 	local entry = assets.Directory[petName]
+
+	if type(entry) ~= "table" then
+		entry = getPetIndex()[normalizeKey(petName)]
+	end
 
 	if type(entry) ~= "table" then
 		local wanted = string.lower(tostring(petName))
@@ -2155,86 +2210,71 @@ local function collectEggInspect()
 	add("EGG INSPECT %s | Job %s", VERSION, tostring(game.JobId):sub(1, 8))
 	add("")
 
-	local samples, scanned, candidates = findEggSamples(1)
-	add("просмотрено объектов: %d | яиц-кандидатов: %d", scanned, #candidates)
+	local eggs = collectEggs()
+	add("яиц найдено: %d", #eggs)
+
+	-- по одному лучшему яйцу на питомца
+	local byPet = {}
+	for _, egg in ipairs(eggs) do
+		local key = tostring(egg.pet or egg.name)
+		local entry = byPet[key]
+		if not entry or (egg.income or 0) > (entry.income or 0) then
+			byPet[key] = egg
+		end
+	end
+
+	local list = {}
+	for _, egg in pairs(byPet) do
+		list[#list + 1] = egg
+	end
+	table.sort(list, function(a, b)
+		return (a.income or 0) > (b.income or 0)
+	end)
+
+	add("")
+	add("[ЯЙЦА]")
+	for index = 1, math.min(12, #list) do
+		local egg = list[index]
+		add("%d) %s", index, shortPath(egg.instance, 70))
+		add("   питомец %s | доход %s | биом %s | UID %s",
+			tostring(egg.pet or "-"), formatNumber(egg.income or 0),
+			tostring(egg.biome), tostring(egg.uid or "-"))
+	end
 	add("")
 
-	-- конфиг идёт ПЕРВЫМ, чтобы не обрезался
+	local first = list[1]
+	if first then
+		add("=== Атрибуты яйца: %s ===", shortPath(first.instance, 80))
+
+		local okAttrs, attributes = pcall(function()
+			return first.instance:GetAttributes()
+		end)
+		if okAttrs and type(attributes) == "table" then
+			local parts = {}
+			for name, value in pairs(attributes) do
+				parts[#parts + 1] = tostring(name) .. "=" .. tostring(value):sub(1, 34)
+			end
+			add("%s", table.concat(parts, ", "):sub(1, 900))
+		end
+
+		add("дерево (глубина 2):")
+		describeInstance(first.instance, 1, lines, { left = 30 }, 2)
+		add("")
+	end
+
 	add("[CONFIG]")
 	dumpConfig(lines)
 	add("")
 
 	add("[ТРЕК]")
 	dumpTrack(lines)
-	add("")
-
-	add("[СПИСОК ЯИЦ]")
-	for index = 1, math.min(12, #candidates) do
-		local entry = candidates[index]
-		add("%d) %s | атрибутов: %d | score: %d",
-			index, shortPath(entry.instance, 80), entry.attributes, entry.score)
-	end
-	add("")
-
-	add("[ЯЙЦО → ПИТОМЕЦ]")
-	local assets = requireModule("Assets")
-	local printedPets, printedCount = {}, 0
-	for _, entry in ipairs(candidates) do
-		if printedCount >= 2 then
-			break
-		end
-		local pet = getEggPetName(entry.instance)
-		if pet and not printedPets[pet] then
-			printedPets[pet] = true
-			printedCount = printedCount + 1
-
-			local petIncome, petField = getPetIncome(pet)
-			add("яйцо: %s", shortPath(entry.instance, 70))
-			add("  питомец: %s | доход: %s (%s)", pet,
-				petIncome and formatNumber(petIncome) or "нет",
-				tostring(petField or "-"))
-
-			if assets and assets.Directory then
-				local config = assets.Directory[pet]
-				if type(config) == "table" then
-					local out = {}
-					collectNumericFields(config, pet, 4, out, { left = 40 }, {})
-					for _, line in ipairs(out) do
-						add("  " .. line:sub(1, 110))
-					end
-				else
-					add("  нет записи в Assets.Directory")
-				end
-			end
-		end
-	end
-	add("")
-
-	for index, egg in ipairs(samples) do
-		add("=== Яйцо %d: %s ===", index, shortPath(egg, 80))
-
-		local okAttrs, attributes = pcall(function()
-			return egg:GetAttributes()
-		end)
-		if okAttrs and type(attributes) == "table" then
-			local parts = {}
-			for name, value in pairs(attributes) do
-				parts[#parts + 1] = tostring(name) .. "=" .. tostring(value):sub(1, 30)
-			end
-			add("атрибуты (%d): %s", #parts, table.concat(parts, ", "):sub(1, 900))
-		end
-
-		add("дерево:")
-		describeInstance(egg, 1, lines, { left = 50 }, 3)
-		add("")
-	end
 
 	local text = table.concat(lines, "\n")
 	if #text > 20000 then
 		text = text:sub(1, 20000) .. "\n... (обрезано)"
 	end
 
-	return text, #samples
+	return text, #eggs
 end
 
 local function createStatusGui()
