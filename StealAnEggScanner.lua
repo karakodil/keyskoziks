@@ -94,7 +94,7 @@ local CONFIG = {
 --=========================== СЛУЖБЫ И ХЕЛПЕРЫ ===============================--
 
 local PREFIX  = "[EggScanner]"
-local VERSION = "v21-noplots"
+local VERSION = "v22-noaether"
 
 local Players           = game:GetService("Players")
 local TeleportService   = game:GetService("TeleportService")
@@ -660,8 +660,8 @@ local function isEggLike(instance)
 		for name, value in pairs(attributes) do
 			local key = string.lower(tostring(name))
 
+			-- PreparedSourceName есть и у станций конвертации, поэтому его тут нет
 			if string.find(key, "canpickup", 1, true)
-				or string.find(key, "preparedsource", 1, true)
 				or (string.find(key, "egg", 1, true) and string.find(key, "uid", 1, true)) then
 				return true
 			end
