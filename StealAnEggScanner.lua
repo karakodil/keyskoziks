@@ -95,7 +95,7 @@ local CONFIG = {
 --=========================== СЛУЖБЫ И ХЕЛПЕРЫ ===============================--
 
 local PREFIX  = "[EggScanner]"
-local VERSION = "v23-stream"
+local VERSION = "v24-slots2"
 
 local Players           = game:GetService("Players")
 local TeleportService   = game:GetService("TeleportService")
@@ -590,11 +590,22 @@ local EGG_CONTAINERS = {
 
 local function isEggContainerName(name)
 	local lower = string.lower(tostring(name))
-	for _, container in ipairs(EGG_CONTAINERS) do
+
+	if lower == "eggs" or lower == "worldeggs" or lower == "eggnests" then
+		return true
+	end
+
+	for _, container in ipairs({ "worldeggs", "eggnests", "eggpoint", "eggspawn", "eggspot" }) do
 		if string.find(lower, container, 1, true) then
 			return true
 		end
 	end
+
+	-- AreaEggSlotsClient / NewEnchantedEggs, но не AreaEggSlot1
+	if string.find(lower, "eggs", 1, true) then
+		return string.sub(lower, -6) == "client" or string.sub(lower, -4) == "eggs"
+	end
+
 	return false
 end
 
@@ -842,6 +853,24 @@ function getEggPetName(instance)
 		end
 	end
 
+	-- иногда данные лежат на ребёнке слота (Hitbox и т.п.), но не у контейнеров
+	if isEggContainerName(instance.Name) then
+		return nil
+	end
+
+	for _, child in ipairs(instance:GetChildren()) do
+		local okChild, childAttributes = pcall(function()
+			return child:GetAttributes()
+		end)
+		if okChild and type(childAttributes) == "table" then
+			for _, name in ipairs(PET_ATTRS) do
+				if childAttributes[name] ~= nil then
+					return normalizePetName(childAttributes[name])
+				end
+			end
+		end
+	end
+
 	return nil
 end
 
@@ -977,6 +1006,11 @@ end
 
 -- Собираем всё про яйцо: атрибуты, UID, биом, питомца и его доход
 local function buildEggEntry(instance)
+	-- контейнеры (EggPoint, EggSpawn...) не считаем яйцом, иначе не зайдём внутрь
+	if isEggContainerName(instance.Name) then
+		return nil
+	end
+
 	local income = readStat(instance, INCOME_ATTRS)
 	local value  = readStat(instance, VALUE_ATTRS)
 	local uid, uidName = getEggUid(instance)
@@ -2381,6 +2415,72 @@ local function dumpAreaSlots(lines)
 	end
 end
 
+-- Полный дамп слотов AreaEggSlotsClient: атрибуты каждого слота
+local function dumpSlots(lines)
+	local slots = workspace:FindFirstChild("AreaEggSlotsClient")
+	if not slots then
+		lines[#lines + 1] = "нет Workspace.AreaEggSlotsClient"
+		return
+	end
+
+	local children = slots:GetChildren()
+
+	local withAttrs, withPet = 0, 0
+	for _, slot in ipairs(children) do
+		local ok, attributes = pcall(function()
+			return slot:GetAttributes()
+		end)
+		if ok and type(attributes) == "table" then
+			local count = 0
+			for name in pairs(attributes) do
+				count = count + 1
+				if string.find(string.lower(tostring(name)), "source", 1, true) then
+					withPet = withPet + 1
+					break
+				end
+			end
+			if count > 0 then
+				withAttrs = withAttrs + 1
+			end
+		end
+	end
+
+	lines[#lines + 1] = string.format("слотов: %d | с атрибутами: %d | с питомцем: %d",
+		#children, withAttrs, withPet)
+
+	for index = 1, math.min(#children, 70) do
+		local slot = children[index]
+		local parts = {}
+
+		local ok, attributes = pcall(function()
+			return slot:GetAttributes()
+		end)
+		if ok and type(attributes) == "table" then
+			for name, value in pairs(attributes) do
+				parts[#parts + 1] = tostring(name) .. "=" .. tostring(value):sub(1, 26)
+			end
+		end
+
+		if #parts == 0 then
+			for _, child in ipairs(slot:GetChildren()) do
+				local okChild, childAttributes = pcall(function()
+					return child:GetAttributes()
+				end)
+				if okChild and type(childAttributes) == "table" then
+					for name, value in pairs(childAttributes) do
+						parts[#parts + 1] = tostring(child.Name):sub(1, 12) .. "."
+							.. tostring(name) .. "=" .. tostring(value):sub(1, 18)
+					end
+				end
+			end
+		end
+
+		lines[#lines + 1] = string.format("%d) %s | детей %d | %s",
+			index, tostring(slot.Name):sub(1, 20), #(slot:GetChildren()),
+			table.concat(parts, ", "):sub(1, 170))
+	end
+end
+
 local function collectEggInspect()
 	local lines = {}
 	local function add(...)
@@ -2441,6 +2541,10 @@ local function collectEggInspect()
 		describeInstance(first.instance, 1, lines, { left = 30 }, 2)
 		add("")
 	end
+
+	add("[СЛОТЫ]")
+	dumpSlots(lines)
+	add("")
 
 	add("[AREA SLOTS]")
 	dumpAreaSlots(lines)
