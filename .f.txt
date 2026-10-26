@@ -1,0 +1,275 @@
+EGG INSPECT v27-modules | Job 4f98ef9f
+
+яиц найдено: 5
+
+[ЯЙЦА]
+1) Workspace.AreaEggSlotsClient.a0b65e0a069a484bb21bc84b9c985cec
+   питомец AstralJackalope | доход 30.00M | биом AreaEggSlotsClient | UID -
+2) Workspace.AreaEggSlotsClient.7bbff81bc53a499c9d61945c16ae0005
+   питомец EnchantedBluejay | доход 2.50M | биом Enchanted Forest | UID -
+3) Workspace.AreaEggSlotsClient.2cdcfa39bff64882a95139445bdb5789
+   питомец PetalBeetle | доход 1.20M | биом AreaEggSlotsClient | UID -
+4) Workspace.AreaEggSlotsClient.84c338f573264c2bafe33b3428c59e01
+   питомец PrismGecko | доход 350.00K | биом Enchanted Forest | UID -
+
+=== Атрибуты яйца: Workspace.AreaEggSlotsClient.a0b65e0a069a484bb21bc84b9c985cec ===
+PreparedSourceName=Workspace.NewEnchantedEggs.AstralJ
+дерево (глубина 2):
+  a0b65e0a069a484bb21bc84b9c985cec (Model)  PreparedSourceName=Workspace.NewEnchantedEggs
+    Hitbox (Part)
+      HitboxWeld (WeldConstraint)
+      HitboxWeld (WeldConstraint)
+    Spiral.001 (MeshPart)
+    Cube.105 (MeshPart)
+
+[СЛОТЫ]
+слотов: 64 | с атрибутами: 12 | с питомцем: 5
+1) b20d96b388c94bfd9a6b | детей 3 | polySurface2.OldId=rbxassetid://13977, polySurface2.DontModify=true, polySurface2.OldId=rbxassetid://11642
+2) 6512f72eb89f4207b9ee | детей 6 | 
+3) 541ddb3b2f39421bb487 | детей 6 | 
+4) 483a5b4da68344639ef6 | детей 6 | polySurface2.OldId=rbxassetid://13240, polySurface2.DontModify=true, polySurface2.OldId=rbxassetid://13477, polySurface2.OldId=rbxassetid://12355, polySurface2.DontModify
+5) ed2cb738f9cc4b558013 | детей 6 | 
+6) b2afcc3f2ed04162b808 | детей 6 | 
+7) 2cdcfa39bff64882a951 | детей 3 | PreparedSourceName=Workspace.NewEnchantedEggs
+8) 62db019350374a26ba1f | детей 3 | 
+9) 98d988c88ddb4fcb8652 | детей 3 | 
+10) a3928378ebd94534b11c | детей 8 | 
+11) a11fd5e1b7de4e0a8ad8 | детей 13 | 
+12) 021feb0384a74f1a9bf4 | детей 8 | 
+13) 341a5fb7ff5542efa0cc | детей 4 | 
+14) 0163270fecb64901a846 | детей 5 | 
+15) 24b62c4c5d9c4b6b8be3 | детей 5 | 
+16) e685cf912b934da49812 | детей 6 | 
+17) 4824976136184ff79ba9 | детей 4 | 
+18) 98faceb5ff044dbf8850 | детей 4 | 
+19) 73ae7b200ec5484cb303 | детей 3 | RBX_ReimportId=33cb6d7c-d512-439d-87c4-72
+20) 0d05ac0569dc4701aa0b | детей 3 | PreparedSourceName=Workspace.NewEnchantedEggs
+21) a198a99621df428c8f3e | детей 2 | pCube176.OldId=rbxassetid://12193
+22) FirstAreaEgg_8687390 | детей 3 | 
+23) FirstAreaEgg_8687390 | детей 2 | 
+24) FirstAreaEgg_8687390 | детей 2 | 
+25) FirstAreaEgg_8687390 | детей 2 | 
+26) FirstAreaEgg_8687390 | детей 2 | 
+27) f55260cc09cc48e4aae2 | детей 4 | 
+28) 703a57369bcf4a3d98eb | детей 4 | 
+29) 043192e7e8094daa965d | детей 6 | 
+30) a8ada3d5b859442494f2 | детей 10 | 
+31) ccf0fc72e12c41308fa3 | детей 6 | 
+32) a0b65e0a069a484bb21b | детей 3 | PreparedSourceName=Workspace.NewEnchantedEggs
+33) a62a156ec1db4c20ac9d | детей 4 | 
+34) 2da9c5795df64e139341 | детей 13 | 
+35) 7bbff81bc53a499c9d61 | детей 3 | PreparedSourceName=Workspace.NewEnchantedEggs
+36) 8cb8a6aae2c3412bbf2e | детей 3 | RBX_ReimportId=33cb6d7c-d512-439d-87c4-72
+37) a1cb2a0d38f14ad7b457 | детей 3 | RBX_ReimportId=33cb6d7c-d512-439d-87c4-72
+38) de5518e5314f4a3b85a9 | детей 4 | 
+39) 16cce48d58094f75a86e | детей 4 | RBX_ReimportId=9448839e-0353-4d44-873a-78
+40) 180106eea8184e239fce | детей 3 | 
+41) 6e6e9cfdad234db487e2 | детей 4 | 
+42) 86d8e10258b04c27bafc | детей 13 | 
+43) 7f1af03f178c4df6b7b6 | детей 5 | 
+44) dd9bbbd9e81f4dc99db6 | детей 2 | 
+45) f33237f7a3ea4ba1b2aa | детей 4 | RBX_ReimportId=9448839e-0353-4d44-873a-78
+46) 3fb1f4102fa34d1f8c7c | детей 2 | 
+47) 41fe639bf31044b4835e | детей 4 | RBX_ReimportId=a2a406c2-0826-47b6-8a70-8c
+48) aa883308f02143e19ddd | детей 5 | 
+49) 84c338f573264c2bafe3 | детей 3 | PreparedSourceName=Workspace.NewEnchantedEggs
+50) 1f510360f44e416c90f6 | детей 6 | 
+51) f6cc6133a5804c9081ff | детей 5 | 
+52) 6aae7a114baa42cfbec0 | детей 2 | 
+53) ba450d029c724e06a6b9 | детей 5 | 
+54) bc0cda14bd8e44379ca4 | детей 4 | RBX_ReimportId=9448839e-0353-4d44-873a-78
+55) f2618354537145fea3c1 | детей 3 | 
+56) 868b21b537544558a580 | детей 2 | 
+57) d3c2e50f0ace4bb1a467 | детей 4 | polySurface2.OldId=rbxassetid://75731, polySurface2.DontModify=true, polySurface2.OldId=rbxassetid://13600, polySurface2.OldId=rbxassetid://13756, polySurface2.DontModify
+58) 64d9f5b3f78841f89486 | детей 6 | 
+59) 246eb06cf18d4374a84b | детей 7 | Part.OG_Transparency=0
+60) a8c4188f308a48baac0a | детей 5 | 
+61) d22c675c067941468760 | детей 3 | 
+62) 3ac56557a7ba4281a534 | детей 6 | 
+63) fdee54e300eb4c0bb134 | детей 2 | 
+64) 25ae8c34d5424d3180bf | детей 3 | 
+
+[AREA SLOTS]
+найдено AreaEggSlots: 1
+Workspace.AreaEggSlotsClient (Folder) | детей 64
+  b20d96b388c94bfd9a6bb9a550b1ee63 (Model) | детей 3
+  6512f72eb89f4207b9ee221567297742 (Model) | детей 6
+  541ddb3b2f39421bb4870bb1e5afa861 (Model) | детей 6
+  483a5b4da68344639ef6c2ff42f8dbb9 (Model) | детей 6
+  ed2cb738f9cc4b5580131d6d09ecfc42 (Model) | детей 6
+  b2afcc3f2ed04162b808b18c784b6444 (Model) | детей 6
+  2cdcfa39bff64882a95139445bdb5789 (Model) | детей 3
+  62db019350374a26ba1f4d67c4265e1b (Model) | детей 3
+  98d988c88ddb4fcb8652f07e7fac4320 (Model) | детей 3
+  a3928378ebd94534b11c9ff214d641e4 (Model) | детей 8
+
+[КОНТЕЙНЕРЫ ЯИЦ]
+Eggs (Folder) | детей 0
+PlacedEggRenders (Folder) | детей 6
+  8998185949_0484e8b4fcf742468dacacd3a70741b2 (Model) | детей 3
+  8998185949_123817cee12b406c87e1bb59ad014961 (Model) | детей 7
+  4697537606_5bf00a7bc9614a0f8ae8250f451ede4d (Model) | детей 2
+  4697537606_3ca4f3979ac642e6ad34e33120bcdc00 (Model) | детей 4
+  4697537606_14053cd7145f4ac5a59efad7e1221a32 (Model) | детей 3
+  4697537606_6e152130daec479e9d95c75383c58de9 (Model) | детей 3
+AreaEggSlotsClient (Folder) | детей 64
+  b20d96b388c94bfd9a6bb9a550b1ee63 (Model) | детей 3
+  6512f72eb89f4207b9ee221567297742 (Model) | детей 6
+  541ddb3b2f39421bb4870bb1e5afa861 (Model) | детей 6
+  483a5b4da68344639ef6c2ff42f8dbb9 (Model) | детей 6
+  ed2cb738f9cc4b5580131d6d09ecfc42 (Model) | детей 6
+  b2afcc3f2ed04162b808b18c784b6444 (Model) | детей 6
+  2cdcfa39bff64882a95139445bdb5789 (Model) | детей 3
+  62db019350374a26ba1f4d67c4265e1b (Model) | детей 3
+HalloweenEggHolders (Folder) | детей 3
+  HalloweenEggHolder (Model) | детей 23
+  Nameplate (BillboardGui) | детей 1
+  PromptPoint (Part) | детей 1
+
+[WORKSPACE АТРИБУТЫ]
+workspace: LiveEventFlag_LightDarkReveal={"WinnerPeriod":5974011,"Winne, ExpandedLobbyServerGroup=None, AuthoritativeClockSample=1792978944.464, AreaEggCyclePeriodSeconds=300, ScrambleActiveDrops=0, ScrambleIsolatedStudioTest=true, RaceEventBotCount=5, LogLevelClient=Trace, RaceEventBotsEnabled=true, LiveEventFlag_HalloweenDimensionContentEnabled=true, LiveEventFlag_RiftOpen=true, LiveEventFlag_TrainEventOpen={"CutsceneEndedAt":1792249200}, LiveEventFlag_HalloweenManorGateOpen=true, ScrambleOutbreakEndsAt=0, ScrambleOutbreakActive=false, ScrambleActiveDrones=0, LiveEventFlag_EnchantedForestOpen=true, AreaEggCycleDefaultNightSeconds=10, LiveEventFlag_StarHandlerOpen=true
+
+[МОДУЛИ]
+модулей найдено: 58
+  ReplicatedStorage.Data.Sounds.Languages.Alphabet
+  ReplicatedStorage.Data.SpeedPacks
+  ReplicatedStorage.Data.HalloweenBossMastery
+  ReplicatedStorage.Data.TheHollow
+[require] ReplicatedStorage.Data.HalloweenPets
+  {Config={ZoneDropTables={Zone1={...}, Zone2={...}, Zone3={...}}}, Specs={Abomination Kong={DisplayName="Gorillastein", EarningRate=3.50B, EggIcon="138011151771666", EggModel="Abomination Kong Egg", EggSource="Frankenstein Kong Egg", Group="World", GrowthTime=36000, Icon="rbxassetid://134471595851418", Id="Abomination Kong", Idle="79588484267783", ModelWeight=40000, Rarity="Eternal", SharedEggFallback=false, Source="Abomination Kong", Walk="85389904486301", Weight=0.31, Zone=3}, BloodBloom={DisplayName="BloodBloom", EarningRate=450.00M, EggIcon="100217674437819", EggModel="BloodBloom Egg", EggSource="BloodBloom", Group="World", GrowthTime=12600, Icon="rbxassetid://92400387987957", Id="BloodBloom", Idle="83606041458196", ModelWeight=6000, Rarity="Secret", SharedEggFallback=false, Source="BloodBloom", Walk="88280129040578", Weight=1.24, Zone=2}, Candlefang={DisplayName="Candlefang", EarningRate=225000, EggIcon="109785720126457", EggModel="Candlefang Egg", EggSource="Candlefang", Group="World", GrowthTime=420, Icon="rbxassetid://133061260339011", Id="Candlefang", Idle="75758085208033", ModelWeight=900, Rarity="Mythic", SharedEggFallback=false, Source="Candlefang", Walk="138517836281476", Weight=19.62, Zone=1}, Crowshade={DisplayName="Crowshade", EarningRate=4.50M, EggIcon="139947082132164", EggModel="Crowshade Egg", EggSource="Crowshade", Group="World", GrowthTime=480, Icon="rbxassetid://110839906232175", Id="Crowshade", Idle="135191385934036", ModelWeight=3000, Rarity="Mythic", SharedEggFallback=false, Source="Crowshade", Walk="83589465179868", Weight=37.51, Zone=3}, Ghost Reaper={DisplayName=..., ...}, ...}}
+[require] ReplicatedStorage.Data.HalloweenEggSettings
+  {EndsAt=1.79B, GiftProductIds={Fifty=3.72B, Single=3.72B, Ten=3.72B, Triple=3.72B}, IsActive=function: 0x0282bc8fb9d11be3, IsPreview=function: 0xe8418aac05351eee, ProductIds={Fifty=3.72B, Single=3.72B, Ten=3.72B, Triple=3.72B}, StartsAt=1.79B, Time=function: 0x67324cd67b20c523}
+[require] ReplicatedStorage.Data.PetWheel
+  {ExcludedPets={Mecha Scrambler=true}, Mutation={1={Id="None", Weight=10}, 10={Id="None", Weight=10}, 11={Id="Rainbow", Weight=5}, 12={Id="Silver", Weight=9}, 2={Id="Silver", Weight=9}, 3={Id="Golden", Weight=7}, 4={Id="None", Weight=10}, 5={Id="Rainbow", Weight=5}, 6={Id="Silver", Weight=9}, 7={Id="None", Weight=10}, 8={Id="Golden", Weight=7}, 9={Id="Silver", Weight=9}}, Rarity={1={Id="Common", Weight=20}, 10={Id="Mythic", Weight=9}, 2={Id="Divine", Weight=3}, 3={Id="Uncommon", Weight=16}, 4={Id="Secret", Weight=5}, 5={Id="Rare", Weight=14}, 6={Id="Eternal", Weight=4}, 7={Id="Epic", Weight=12}, 8={Id="Cosmic", Weight=7}, 9={Id="Legendary", Weight=10}}, ReturnSeconds=45, UseRadius=35}
+  ReplicatedStorage.Data.GhostDogQuest
+  ReplicatedStorage.Data.HalloweenManor
+  ReplicatedStorage.Data.HalloweenIndex
+[require] ReplicatedStorage.Data.HalloweenDimensionEgg
+  {Chance=function: 0x51fedf1f470329a4, DisplayName="Halloween Dimension Egg", Entries={1={AssetId="Candy Corn", Weight=51}, 2={AssetId="Hollow Bat", Weight=24}, 3={AssetId="Scarecrow", Weight=18}, 4={AssetId="Pumpkin Golem", Weight=6.5}, 5={AssetId="Soul Phantom", Weight=0.5}}, ModelName="Halloween Dimension Egg", Price=2250, Roll=function: 0xa72cd7649db11d79}
+  ReplicatedStorage.Data.CursedIslandWars
+  ReplicatedStorage.Data.RaceRally
+  ReplicatedStorage.Data.StarBundles
+  ReplicatedStorage.Data.RacePowerUps
+  ReplicatedStorage.Data.MountRace
+  ReplicatedStorage.Data.WispQuests
+  ReplicatedStorage.Data.BeanstalkEvent
+  ReplicatedStorage.Data.BanjoCricket
+[require] ReplicatedStorage.Data.LuminousEgg
+  {BackgroundImage="rbxassetid://108209625322017", DisplayName="Luminous Egg", DropTable={1={1="Spike", 2=39}, 2={1="Manta Ray", 2=24}, 3={1="Megalodon", 2=18}, 4={1="Electric Eel", 2=11}, 5={1="Terra Snapper", 2=6.5}, 6={1="Cthulhu", 2=0.5}}, Entries={1={AssetId="Spike", Weight=39}, 2={AssetId="Manta Ray", Weight=24}, 3={AssetId="Megalodon", Weight=18}, 4={AssetId="Electric Eel", Weight=11}, 5={AssetId="Terra Snapper", Weight=6.5}, 6={AssetId="Cthulhu", Weight=0.5}}, MechaEntries={1={AssetId="Depths Spike", Weight=39}, 2={AssetId="Depths Manta Ray", Weight=24}, 3={AssetId="Depths Megalodon", Weight=18}, 4={AssetId="Depths Electric Eel", Weight=11}, 5={AssetId="Depths Terra Snapper", Weight=6.5}, 6={AssetId="Depths Cthulhu", Weight=0.5}}}
+  ReplicatedStorage.Data.ScrambleMastery
+  ReplicatedStorage.Data.CashPacks
+  ReplicatedStorage.Data.ScrambleTradeIn
+  ReplicatedStorage.Data.LimitedTimePopups
+  ReplicatedStorage.Data.SamplePacks
+  ReplicatedStorage.Data.MonsterEgg
+  ReplicatedStorage.Data.FallenPowerUp
+  ReplicatedStorage.Data.GiftProductsMapping
+  ReplicatedStorage.Data.LightVsDarkness
+  ReplicatedStorage.Data.EggSkins
+  ReplicatedStorage.Data.Rift
+  ReplicatedStorage.Data.BossEvent
+  ReplicatedStorage.Data.BossMastery
+  ReplicatedStorage.Data.SfxRework
+  ReplicatedStorage.Data.BrainrotEgg
+  ReplicatedStorage.Data.MonsterParasite
+  ReplicatedStorage.Data.ExpandedLobby
+  ReplicatedStorage.Data.CaptureTheEgg
+  ReplicatedStorage.Data.Sakura
+  ReplicatedStorage.Data.DragonEgg
+  ReplicatedStorage.Data.AdminAbuseEgg
+  ReplicatedStorage.Data.TreadmillMediaCatalog
+  ReplicatedStorage.Data.Badges
+  ReplicatedStorage.Data.Gears
+  ReplicatedStorage.Data.Areas
+  ReplicatedStorage.Data.Guards
+  ReplicatedStorage.Data.Treadmills
+  ReplicatedStorage.Data.Trails
+  ReplicatedStorage.Data.Rarity
+  ReplicatedStorage.Data.Products
+  ReplicatedStorage.Data.GuardTutorialSteps
+  ReplicatedStorage.Data.LimitedEgg
+  ReplicatedStorage.Data.SammyEvent
+  ReplicatedStorage.Data.Gamepasses
+  ReplicatedStorage.Data.AreaEggResetCycle
+  ReplicatedStorage.Data.Currency
+  ReplicatedStorage.Data.Bases
+  ReplicatedStorage.Data.Assets
+
+[CONFIG]
+[LimitedEgg]
+  {Active=function: 0x90618a609f888891, Extinction={DisplayName="Extinction Egg", DropTable={1={1="Glyptodon", 2=39}, 2={1="Terrorbird", 2=24}, 3={1="Megatherium", 2=18}, 4={1="Dunkleosteus", 2=11}, 5={1="Gigantopithecus", 2=6.5}, 6={1="Sabertooth", 2=0.5}}, EndsAt=1.79B, Entries={1={AssetId="Glyptodon", Weight=39}, 2={AssetId="Terrorbird", Weight=24}, 3={AssetId="Megatherium", Weight=18}, 4={AssetId="Dunkleosteus", Weight=11}, 5={AssetId="Gigantopithecus", Weight=6.5}, 6={AssetId="Sabertooth", Weight=0.5}}, InfoText="Pets can have different <font color="#55FF77">...", MechaReroll={Chance=0.01, DisplayChance=0.01, DropTable={1={...}, 2={...}, 3={...}, 4={...}, 5={...}, 6={...}}, Entries={1={...}, 2={...}, 3={...}, 4={...}, 5={...}, 6={...}}}, Offers={1={Amount=1, ProductName="Extinction Egg"}, 2={Amount=3, ProductName="Extinction Egg x3"}, 3={Amount=10, ProductName="Extinction Egg x10"}, 4={Amount=50, ProductName="Extinction Egg x50"}}, RerollName="Skeletal Re-roll"}, ForCategory=function: 0x21f3f5f395712f59, Halloween={DisplayName="Halloween Egg", DropTable={1={1="Halloween Glyptodon", 2=39}, 2={1="Halloween Terrorbird", 2=24}, 3={1="Halloween Megatherium", 2=18}, 4={1="Halloween Dunkleosteus", 2=11}, 5={1="Halloween Gigantopithecus", 2=6.5}, 6={1="Halloween Sabertooth", 2=0.5}}, EndsAt=1.79B, Entries={1={AssetId="Halloween Glyptodon", Weight=39}, 2={AssetId="Halloween Terrorbird", Weight=24}, 3={AssetId="Halloween Megatherium", Weight=18}, 4={AssetId="Halloween Dunkleosteus", Weight=11}, 5={AssetId="Halloween Gigantopithecus", Weight=6.5}, 6={AssetId="Halloween Sabertooth", Weight=0.5}}, InfoText="Pets can have different <font color="#55FF77">...", MechaReroll={Chance=0.01, DisplayChance=0.01, DropTable={1={...}, 2={...}, 3={...}, 4={...}, 5={...}, 6={...}}, Entries={1={...}, 2={...}, 3={...}, 4={...}, 5={...}, 6={...}}}, Offers={1={Amount=1, GiftProductName="Halloween Egg Gift", ProductName="Halloween Egg"}, 2={Amount=3, GiftProductName="Halloween Egg Gift x3", ProductName="Halloween Egg x3"}, 3={Amount=10, GiftProductName="Halloween Egg Gift x10", ProductName="Halloween Egg x10"}, 4={Amount=50, GiftProductName="Halloween Egg Gift x50", ProductName="Halloween Egg x50"}}, RerollName="Zombified Re-roll"}, IsOnSale=function: 0x54d9cc0ecbf50249, Luminous={DisplayName="Luminous Egg", DropTable={1={1="Spike", 2=39}, 2={1="Manta Ray", 2=24}, 3={1="Megalodon", 2=18}, 4={1="Electric Eel", 2=11}, 5={1="Terra Snapper", 2=6.5}, 6={1="Cthulhu", 2=0.5}}, EndsAt=1.79B, Entries={1={AssetId="Spike", Weight=39}, 2={AssetId="Manta Ray", Weight=24}, 3={AssetId="Megalodon",
+
+[Areas]
+  биомы (13): Abyss Ocean, Cherry Blossom, Cosmic, Desert, Enchanted Forest, Forest, Jungle, Lake, Light Dark, Prehistoric, Snow, Titan Temple, Volcano
+  Abyss Ocean: {Color=0.156863, 0.72549, 0.960784, DisplayName="Abyss Ocean", DropTable={1={1="Parrotfish", 2=34.755713}, 2={1="Swordfish", 2=24.665345}, 3={1="Finned Thresher", 2=19.059585}, 4={1="Orca", 2=14.574977}, 5={1="Whale Shark", 2=3.412663}, 6={1="Alabaster Whale", 2=2.616375}, 7={1="Kraken", 2=0.826453}, 8={1="El Maja", 2=0.08889}}, Emoji="😱", GuardId="Abyss Ocean", Icon="rbxassetid://114973940272302", IndexBatGearId="Abyss Ocean Bat", Rarity={Color=0.254902, 0, 0.666667, DisplayName="Cosmic", ItemTemplate=ItemTemplate, Rank=7, RarityGradient=RarityGradient, _id="Cosmic"}, _id="Abyss Ocean"}
+
+[Assets.Directory]
+  всего 273, с 'egg' в имени: 0
+
+[Rarity]
+  BrainrotGod, Common, Cosmic, Divine, Epic, Eternal, Legendary, LightDark, Limited, Mythic, Prismatic, Rainbow, Rare, Secret, SuperRare, Titan, Transcendent, Uncommon
+  BrainrotGod: {Color=0.67451, 0, 0.776471, DisplayName="Squishy God", ItemTemplate=ItemTemplate, Rank=6, RarityGradient=RarityGradient, _id="BrainrotGod"}
+
+[Currency]
+  BossTokens, HalloweenTokens, Money, SakuraCrystals
+  BossTokens: {Desc="", DisplayName="Boss Tokens", Icon="rbxassetid://84787104764975", Rarity={Color=0.768627, 0.00784314, 1, DisplayName="Epic", ItemTemplate=ItemTemplate, Rank=4, RarityGradient=RarityGradient, _id="Epic"}, _id="BossTokens"}
+
+[Products с Egg]
+  EggGrowAll, Extinction Egg, Extinction Egg x10, Extinction Egg x3, Extinction Egg x50, Halloween Egg, Halloween Egg Gift, Halloween Egg Gift x10, Halloween Egg Gift x3, Halloween Egg Gift x50, Halloween Egg x10, Halloween Egg x3, Halloween Egg x50, Limited Egg, Limited Egg x10, Limited Egg x3, Limited Egg x50, TreadmillAdEggBoost, TreadmillAdEggBoost_DEV, TreadmillAdEggBoost_DEV2
+  EggGrowAll: {Authorize=function: 0xf4fad6a10d62aaa5, Desc="Finish growing all placed eggs.", DisplayName="Grow All Eggs", Grant=function: 0x87e5295c60d545de, HoldWhilePending=true, Name="EggGrowAll", Precheck=function: 0x28a1e5e3579fa297, ProductId=3.61B, ResolveFailedReceipt=function: 0xea9e6f72f7cb8a29, Silent=true}
+
+[ТРЕК]
+Forest (Model) | детей: 6
+  Guard | детей: 7
+    EggPoint (Part) | детей 2 | 
+      Decal (Decal)
+      CenterWeld (WeldConstraint)
+Lake (Model) | детей: 5
+  Guard | детей: 7
+    EggPoint (Part) | детей 2 | 
+      Decal (Decal)
+      CenterWeld (WeldConstraint)
+Cosmic (Model) | детей: 5
+  Guard | детей: 8
+    EggPoint (Part) | детей 1 | 
+      WeldConstraint (WeldConstraint)
+Volcano (Model) | детей: 5
+  Guard | детей: 7
+    EggPoint (Part) | детей 2 | 
+      Decal (Decal)
+      CenterWeld (WeldConstraint)
+Prehistoric (Model) | детей: 5
+  Guard | детей: 7
+    EggPoint (Part) | детей 2 | 
+      Decal (Decal)
+      WeldConstraint (WeldConstraint)
+Desert (Model) | детей: 5
+  Guard | детей: 7
+    EggPoint (Part) | детей 4 | 
+      AlertGui (BillboardGui)
+      CenterWeld (WeldConstraint)
+      Decal (Decal)
+      SleepVFXAttachment (Attachment)
+Light Dark (Model) | детей: 5
+  Guard | детей: 8
+    EggPoint (Part) | детей 1 | 
+      WeldConstraint (WeldConstraint)
+Abyss Ocean (Model) | детей: 5
+  Guard | детей: 6
+    EggPoint (Part) | детей 2 | 
+      CenterWeld (WeldConstraint)
+      Decal (Decal)
+Snow (Model) | детей: 5
+  Guard | детей: 7
+    EggPoint (Part) | детей 2 | 
+      Decal (Decal)
+      CenterWeld (WeldConstraint)
+Cherry Blossom (Model) | детей: 5
+  Guard | детей: 8
+    EggPoint (Part) | детей 2 | 
+      Decal (Decal)
+      WeldConstraint (WeldConstraint)
+Titan Temple (Model) | детей: 5
+  Guard | детей: 8
+    EggPoint (Part) | детей 1
+... (обрезано)

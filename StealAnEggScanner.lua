@@ -95,7 +95,7 @@ local CONFIG = {
 --=========================== СЛУЖБЫ И ХЕЛПЕРЫ ===============================--
 
 local PREFIX  = "[EggScanner]"
-local VERSION = "v27-modules"
+local VERSION = "v28-deep"
 
 local Players           = game:GetService("Players")
 local TeleportService   = game:GetService("TeleportService")
@@ -2544,8 +2544,13 @@ local function dumpSlots(lines)
 		end
 
 		local okPosition, position = pcall(function()
-			return slot.Position
+			return slot:GetPivot().Position
 		end)
+		if not okPosition then
+			okPosition, position = pcall(function()
+				return slot.Position
+			end)
+		end
 		if okPosition and position then
 			local okXYZ = pcall(function()
 				parts[#parts + 1] = string.format("pos=%.0f,%.0f,%.0f", position.X, position.Y, position.Z)
@@ -2580,6 +2585,32 @@ local function dumpSlots(lines)
 		if #texts > 0 then
 			lines[#lines + 1] = "   текст: " .. table.concat(texts, " | ")
 		end
+	end
+
+	-- глубоко смотрим: первый заполненный и первый пустой
+	local shownDeep = 0
+	for _, slot in ipairs(children) do
+		if shownDeep >= 3 then
+			break
+		end
+
+		local okAttrs, attributes = pcall(function()
+			return slot:GetAttributes()
+		end)
+		local hasPet = false
+		if okAttrs and type(attributes) == "table" then
+			for name in pairs(attributes) do
+				if string.find(string.lower(tostring(name)), "source", 1, true) then
+					hasPet = true
+					break
+				end
+			end
+		end
+
+		shownDeep = shownDeep + 1
+		lines[#lines + 1] = string.format("=== Глубоко: %s | %s ===",
+			tostring(slot.Name):sub(1, 20), hasPet and "с питомцем" or "пустой")
+		describeInstance(slot, 1, lines, { left = 35 }, 3)
 	end
 end
 
@@ -2655,6 +2686,39 @@ local function dumpModules(lines)
 	end
 end
 
+-- Папки New*Eggs: шаблоны яиц по зонам
+local function dumpNewEggs(lines)
+	for _, child in ipairs(workspace:GetChildren()) do
+		local lower = string.lower(tostring(child.Name))
+		if string.sub(lower, -4) == "eggs" then
+			lines[#lines + 1] = string.format("%s (%s) | детей %d",
+				tostring(child.Name), child.ClassName, #(child:GetChildren()))
+
+			local shown = 0
+			for _, sub in ipairs(child:GetChildren()) do
+				if shown >= 5 then
+					break
+				end
+				shown = shown + 1
+
+				local parts = {}
+				local ok, attributes = pcall(function()
+					return sub:GetAttributes()
+				end)
+				if ok and type(attributes) == "table" then
+					for name, value in pairs(attributes) do
+						parts[#parts + 1] = tostring(name) .. "=" .. tostring(value):sub(1, 24)
+					end
+				end
+
+				lines[#lines + 1] = string.format("  %s (%s) | детей %d | %s",
+					tostring(sub.Name):sub(1, 26), sub.ClassName, #(sub:GetChildren()),
+					table.concat(parts, ", "):sub(1, 130))
+			end
+		end
+	end
+end
+
 local function collectEggInspect()
 	local lines = {}
 	local function add(...)
@@ -2715,6 +2779,10 @@ local function collectEggInspect()
 		describeInstance(first.instance, 1, lines, { left = 30 }, 2)
 		add("")
 	end
+
+	add("[NEW*EGGS]")
+	dumpNewEggs(lines)
+	add("")
 
 	add("[СЛОТЫ]")
 	dumpSlots(lines)

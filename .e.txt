@@ -1,0 +1,182 @@
+RECON v27-modules | Job 4f98ef9f | объектов 112533
+
+[EGG-имена] уникальных: 354
+EggSpotBottom x85 | статы: нет | ...scene.CutsceneVFX.Eggs.Nests.NestModel.EggSpotBottom
+EggFitBounds x85 | статы: нет | ...tscene.CutsceneVFX.Eggs.Nests.NestModel.EggFitBounds
+CarryAreaEgg x65 | статы: нет | Workspace.SmartPromptPart.CarryAreaEgg
+EggSpawn x17 | статы: да | ...VFX.RiftTradeIn.LockedLaboratory.MainScreen.EggSpawn
+CarryHalloweenEgg x15 | статы: нет | Workspace.SmartPromptPart.CarryHalloweenEgg
+EggNest x15 | статы: да | Workspace.HalloweenDimension.EggNests.EggNest
+EggGlow x15 | статы: нет | ...oweenDimension.WorldEggs.HalloweenEgg.Hitbox.EggGlow
+HalloweenEgg x15 | статы: да | Workspace.HalloweenDimension.WorldEggs.HalloweenEgg
+
+[ЧИСЛОВЫЕ АТРИБУТЫ] уникальных: 261
+UID x86 = 14870.51Q | ...ets.4697537606_ef14870508134b1497d861c3473022a2
+RBX_ReimportId x836 = 8.06Q | ...odels.Zombified Halloween Gigantopithecus.Model
+OldId x1011 = 140.73T | ...ityTreadmill.Celebrity.Meshes/untitled_Cube.082
+SkyboxLf x1 = 135.70T | ....Game.LightingController.Presets.AdminAbuse.Sky
+IdleAnimation x5 = 135.19T | ReplicatedStorage.AssetModels.Crowshade
+Sheet x7 = 130.94T | ...slandWars.VFX.V5_Landmine.Root.Burst.DirtColumn
+SkyboxBk x1 = 129.42T | ....Game.LightingController.Presets.AdminAbuse.Sky
+WalkAnimation x5 = 128.24T | ReplicatedStorage.AssetModels.Toadstool
+
+[ValueBase топ-10]
+Workspace.kopelkov.Animate.dance.Animation3.Weight (NumberValue) = 10
+Workspace.kopelkov.Animate.dance.Animation2.Weight (NumberValue) = 10
+Workspace.kopelkov.Animate.dance.Animation1.Weight (NumberValue) = 10
+...space.kopelkov.Animate.dance2.Animation3.Weight (NumberValue) = 10
+...space.kopelkov.Animate.dance2.Animation2.Weight (NumberValue) = 10
+...space.kopelkov.Animate.dance2.Animation1.Weight (NumberValue) = 10
+...space.kopelkov.Animate.dance3.Animation3.Weight (NumberValue) = 10
+...space.kopelkov.Animate.dance3.Animation2.Weight (NumberValue) = 10
+...space.kopelkov.Animate.dance3.Animation1.Weight (NumberValue) = 10
+Workspace.sndr_046.Animate.dance.Animation3.Weight (NumberValue) = 10
+
+[Текст с числами топ-8]
+...Upgrade.Sign.SurfaceGui.Frame.Upgrade.Cost = $7.5Qa
+...de.Sign.SurfaceGui.Frame.FirstUpgrade.Cost = $5Qa
+...Upgrade.Sign.SurfaceGui.Frame.Upgrade.Cost = $5Qa
+...ClaimArea.OfflineMoneyClaimBillboard.Money = OFFLINE CLAIM! <br/>$171
+...oBillboard.ScreenFrame.Available.CashValue = $6.9T
+...70508134b1497d861c3473022a2.Data.PerSecond = $61B/s
+...edSpeedSign.Main.SurfaceGui.Required.Speed = 50B
+...2a9a7a0412bb0b85159efcd27b9.Data.PerSecond = $34B/s
+
+[Имена со value/price/worth/cost]
+...catedStorage.Assets.UI.PlotUpgrade.FirstUpgrade.Cost (TextLabel)
+...tedStorage.Assets.UI.Leaderboards.Money.Holder_Value (Frame)
+...aderboards.Money.Holder_Value.Holder.TextLabel_Value (TextLabel)
+...tedStorage.Assets.UI.Leaderboards.Speed.Holder_Value (Frame)
+...aderboards.Speed.Holder_Value.Holder.TextLabel_Value (TextLabel)
+...icatedStorage.Controllers.GUI.ActiveAssetIncomePopup (ModuleScript)
+ReplicatedStorage.Value (StringValue)
+ReplicatedStorage.UserGenerated.Lang.Values (ModuleScript)
+...default).ThumbnailConfiguration.ThumbnailCameraValue (CFrameValue)
+... Puffer).ThumbnailConfiguration.ThumbnailCameraValue (CFrameValue)
+...k Scarf).ThumbnailConfiguration.ThumbnailCameraValue (CFrameValue)
+...eshPart).ThumbnailConfiguration.ThumbnailCameraValue (CFrameValue)
+...wardedVideoBillboard.ScreenFrame.Available.CashValue (TextLabel)
+Workspace.Plots.3.ToUpdate.StarterPen.Gate.Value (NumberValue)
+....TreadmillUpgrade.Sign.SurfaceGui.Frame.Upgrade.Cost (TextLabel)
+
+[Биомы] найдено: 15
+  Forest (6 детей)
+  Lake (5 детей)
+  Cosmic (5 детей)
+  Volcano (5 детей)
+  Prehistoric (5 детей)
+  Desert (5 детей)
+  Light Dark (5 детей)
+  Abyss Ocean (5 детей)
+  Snow (5 детей)
+  Cherry Blossom (5 детей)
+  Titan Temple (5 детей)
+  Jungle (5 детей)
+  Enchanted Forest (5 детей)
+  HalloweenDimension (эвент)
+  LightDarkSubBiomeVfx (эвент)
+
+[ReplicatedStorage]
+UserGenerated (ModuleScript)
+CmdrClient (ModuleScript)
+Client (Folder)
+  HiddenUIHandler (ModuleScript)
+  GridCellFitter (ModuleScript)
+  FuseMachineSignals (ModuleScript)
+  PlatformController (ModuleScript)
+  SmartProximityPrompt (ModuleScript)
+GearTools (Folder)
+  Phone (Tool)
+  GravityDisruptor (Tool)
+  ShopItems (Folder)
+Value (StringValue)
+Mutations (Folder)
+  Scrambled (Folder)
+  Golden (Folder)
+  Rainbow (Folder)
+  Silver (Folder)
+  Sakura (Folder)
+ProximityPrompt (ProximityPrompt)
+TopbarPlusReference (ObjectValue)
+MeshAssets (Folder)
+AssetMutationTargets (Folder)
+AssetMutationReplacements (Folder)
+Packages (Folder)
+  Networking (ModuleScript)
+  CameraShaker (ModuleScript)
+  Streamable (ModuleScript)
+  Input (ModuleScript)
+  InstanceCache (ModuleScript)
+Shared (Folder)
+  NotificationItem (ModuleScript)
+  Preferences (ModuleScript)
+  Save (ModuleScript)
+  environment (ModuleScript)
+  TreadmillVideoController (ModuleScript)
+Controllers (Folder)
+  GUI (Folder)
+  Game (Folder)
+GhostBossAssets (Folder)
+  Boss (Model)
+  GreenFire (Model)
+  VFX (Folder)
+  Sounds (Folder)
+  SoulOrb (Part)
+CutsceneAssets (Folder)
+  PumpkinBossCutsceneAssets (Folder)
+Assets (Folder)
+  Extra (Folder)
+  SpawnLock (Model)
+  VFX (Folder)
+  SubBiomeBuilds (Folder)
+  SammyEventVisuals (Folder)
+AssetModels (Folder)
+  Pterodactyl (Model)
+  Warden (Model)
+  Spider (Model)
+  Yeti (Model)
+  Ghost Reaper (Model)
+Data (Folder)
+  Assets (ModuleScript)
+  Bases (ModuleScript)
+  Currency (ModuleScript)
+  AreaEggResetCycle (ModuleScript)
+  Gamepasses (ModuleScript)
+TrainGhostTemplates (Folder)
+  HauntedSpirit (Model)
+  VengefulSpirit (Model)
+  LostSpirit (Model)
+ContentCreatorRemotes (Folder)
+  Request (RemoteFunction)
+  Update (RemoteEvent)
+AdEggBoostRemotes (Folder)
+  AskAdGrowthBoost (RemoteFunction)
+  AdGrowthBoostResult (RemoteEvent)
+  AdEggBoostConfigResult (RemoteEvent)
+  LogTelemetry (RemoteEvent)
+__ReplicatorInternal (Folder)
+  RemoteEvent (RemoteEvent)
+GhostBossState (Configuration)
+Api (BindableEvent)
+
+[Remote-объекты]
+RemoteEvent (RemoteEvent)
+LogTelemetry (RemoteEvent)
+AdEggBoostConfigResult (RemoteEvent)
+AdGrowthBoostResult (RemoteEvent)
+AskAdGrowthBoost (RemoteFunction)
+Update (RemoteEvent)
+Request (RemoteFunction)
+RE/IslandWars/OutroFinished (RemoteEvent)
+RE/IslandWars/Use (RemoteEvent)
+RE/IslandWars/Moment (RemoteEvent)
+RE/IslandWars/State (RemoteEvent)
+RF/IslandWars/Fetch (RemoteFunction)
+RF/TheHollow/AskEnter (RemoteFunction)
+RF/RaceRally/AskEquipRacer (RemoteFunction)
+RF/RaceRally/AskClaimMilestone (RemoteFunction)
+RF/RaceRally/AskBuy (RemoteFunction)
+RE/PetWheel/Finish (RemoteEvent)
+RF/PetWheel/Spin (RemoteFunction)
+RF/ManorInterior/Leave (RemoteFunction)
+RF/ManorInterior/Arrive (RemoteFunction)
