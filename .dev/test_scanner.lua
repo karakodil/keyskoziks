@@ -195,7 +195,7 @@ assert(API, "API not exported")
 
 --============================ тесты =======================================--
 print("== версия ==")
-check(API.VERSION == "v40-split", "версия v40-split (получено " .. tostring(API.VERSION) .. ")")
+check(API.VERSION == "v41-worldonly", "версия v41-worldonly (получено " .. tostring(API.VERSION) .. ")")
 
 print("== формат чисел ==")
 check(API.formatNumber(25600000) == "25.6M", "25.6M -> " .. API.formatNumber(25600000))
@@ -214,7 +214,7 @@ end
 check(names["Basic Egg"] == true, "яйцо по имени найдено")
 check(names["HolyPeacock"] == true, "яйцо в Nests найдено")
 check(names["slot1"] == true, "яйцо в AreaEggSlotsClient найдено")
-check(names["8301557848_deadbeef"] == true, "яйцо в PlacedEggRenders найдено")
+check(names["8301557848_deadbeef"] == nil, "яйцо на базе (PlacedEggRenders) НЕ сканируется")
 check(names["Koi"] == nil, "эмиттер Koi в водопаде НЕ считается яйцом")
 check(names["Aetheron"] == nil, "станция Convert НЕ считается яйцом")
 check(names["8687390958_10b4"] == nil, "питомец на базе НЕ считается яйцом")
@@ -222,9 +222,7 @@ check(names["8687390958_10b4"] == nil, "питомец на базе НЕ счи
 check(byName["slot1"] and byName["slot1"].pet == "SpiritPanda", "питомец из PreparedSourceName")
 check(byName["slot1"] and byName["slot1"].income == 90000000, "доход SpiritPanda 90M")
 check(byName["HolyPeacock"] and byName["HolyPeacock"].income == 273000000, "доход HolyPeacock 273M")
-check(byName["8301557848_deadbeef"] and byName["8301557848_deadbeef"].income == 4900000000, "доход Dread Wolf 4.9B")
 check(byName["HolyPeacock"] and byName["HolyPeacock"].biome == "Cherry Blossom", "биом Cherry Blossom по пути")
-check(byName["8301557848_deadbeef"] and byName["8301557848_deadbeef"].placed == true, "яйцо на базе помечено placed")
 check(byName["slot1"] and byName["slot1"].placed == false, "яйцо в мире не помечено placed")
 
 print("== инспектор ==")

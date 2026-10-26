@@ -84,6 +84,7 @@ local CONFIG = {
 	SCAN_REPLICATED   = false,       -- сканировать ещё и ReplicatedStorage
 	IGNORE_EVENT_WORLDS = true,      -- пропускать *Dimension (Halloween и т.п.)
 	STREAM_AREAS      = true,        -- просить клиент догрузить все зоны трека
+	INCLUDE_PLACED    = false,       -- яйца на базах (их украсть нельзя) — не сканируем
 	SHOW_GUI          = true,        -- небольшое окно со статусом
 	AUTO_RELOAD       = true,        -- queue_on_teleport: перезапуск после телепорта
 	SCRIPT_URL        = "https://raw.githubusercontent.com/karakodil/keyskoziks/egg-scanner/StealAnEggScanner.lua",
@@ -95,7 +96,7 @@ local CONFIG = {
 --=========================== СЛУЖБЫ И ХЕЛПЕРЫ ===============================--
 
 local PREFIX  = "[EggScanner]"
-local VERSION = "v40-split"
+local VERSION = "v41-worldonly"
 
 local Players           = game:GetService("Players")
 local TeleportService   = game:GetService("TeleportService")
@@ -576,6 +577,7 @@ end
 
 local getEggPetName -- определяется ниже
 local getPetIndex, normalizeKey -- определяются ниже
+local insidePlacedRenders -- определяется ниже
 
 -- Слова, по которым объект — обвязка, а не само яйцо
 local EGG_SKIP_WORDS = {
@@ -653,6 +655,10 @@ local function isEggLike(instance)
 	end
 
 	if CONFIG.IGNORE_EVENT_WORLDS and insideEventWorld(instance) then
+		return false
+	end
+
+	if not CONFIG.INCLUDE_PLACED and insidePlacedRenders(instance) then
 		return false
 	end
 
@@ -1074,7 +1080,7 @@ local function getPetAreaIndex()
 end
 
 -- Яйцо посажено на базу (PlacedEggRenders)?
-local function insidePlacedRenders(instance)
+function insidePlacedRenders(instance)
 	local node = instance.Parent
 	for _ = 1, 3 do
 		if not node or node == workspace then
@@ -1206,7 +1212,10 @@ local function collectEggs()
 
 		local shouldDescend = true
 
-		if CONFIG.IGNORE_EVENT_WORLDS and isEventWorld(instance) then
+		local skipPlaced = not CONFIG.INCLUDE_PLACED
+			and string.find(string.lower(tostring(instance.Name)), "placedegg", 1, true) ~= nil
+
+		if skipPlaced or (CONFIG.IGNORE_EVENT_WORLDS and isEventWorld(instance)) then
 			shouldDescend = false
 		elseif instance ~= workspace and instance.Parent ~= nil then
 			local matched = tagged[instance] or isEggLike(instance)
