@@ -94,7 +94,7 @@ local CONFIG = {
 --=========================== СЛУЖБЫ И ХЕЛПЕРЫ ===============================--
 
 local PREFIX  = "[EggScanner]"
-local VERSION = "v18-area"
+local VERSION = "v19-slots"
 
 local Players           = game:GetService("Players")
 local TeleportService   = game:GetService("TeleportService")
@@ -2239,6 +2239,66 @@ local function dumpTrack(lines)
 	end
 end
 
+-- Поиск объектов по части имени (глубина ограничена)
+local function findByName(root, pattern, maxDepth)
+	local found = {}
+
+	local function walk(instance, depth)
+		if depth > maxDepth or #found >= 10 then
+			return
+		end
+		for _, child in ipairs(instance:GetChildren()) do
+			if string.find(string.lower(tostring(child.Name)), pattern, 1, true) then
+				found[#found + 1] = child
+			else
+				walk(child, depth + 1)
+			end
+		end
+	end
+
+	walk(root, 0)
+	return found
+end
+
+-- Разбор AreaEggSlots*: возможно, там слоты всех локаций
+local function dumpAreaSlots(lines)
+	local candidates = {}
+
+	for _, root in ipairs({ workspace, ReplicatedStorage }) do
+		if root then
+			for _, instance in ipairs(findByName(root, "areaeggslots", 4)) do
+				candidates[#candidates + 1] = instance
+			end
+		end
+	end
+
+	lines[#lines + 1] = "найдено AreaEggSlots: " .. #candidates
+
+	for _, instance in ipairs(candidates) do
+		lines[#lines + 1] = string.format("%s (%s) | детей %d",
+			shortPath(instance, 80), instance.ClassName, #(instance:GetChildren()))
+
+		local children = instance:GetChildren()
+		for index = 1, math.min(#children, 10) do
+			local child = children[index]
+			lines[#lines + 1] = string.format("  %s (%s) | детей %d",
+				tostring(child.Name):sub(1, 34), child.ClassName, #(child:GetChildren()))
+		end
+
+		if instance:IsA("ModuleScript") then
+			local ok, result = pcall(function()
+				return require(instance)
+			end)
+			if ok then
+				lines[#lines + 1] = "  require: "
+					.. describeValue(result, 3, { left = 80 }, {}):sub(1, 2200)
+			else
+				lines[#lines + 1] = "  require error: " .. tostring(result):sub(1, 90)
+			end
+		end
+	end
+end
+
 local function collectEggInspect()
 	local lines = {}
 	local function add(...)
@@ -2299,6 +2359,10 @@ local function collectEggInspect()
 		describeInstance(first.instance, 1, lines, { left = 30 }, 2)
 		add("")
 	end
+
+	add("[AREA SLOTS]")
+	dumpAreaSlots(lines)
+	add("")
 
 	add("[КОНТЕЙНЕРЫ ЯИЦ]")
 	for _, child in ipairs(workspace:GetChildren()) do
