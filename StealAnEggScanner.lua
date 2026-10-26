@@ -82,6 +82,7 @@ local CONFIG = {
 
 	MAX_SCAN_OBJECTS  = 200000,      -- предохранитель от зависания на огромных картах
 	SCAN_REPLICATED   = false,       -- сканировать ещё и ReplicatedStorage
+	IGNORE_EVENT_WORLDS = true,      -- пропускать *Dimension (Halloween и т.п.)
 	SHOW_GUI          = true,        -- небольшое окно со статусом
 	AUTO_RELOAD       = true,        -- queue_on_teleport: перезапуск после телепорта
 	SCRIPT_URL        = "https://raw.githubusercontent.com/karakodil/keyskoziks/egg-scanner/StealAnEggScanner.lua",
@@ -93,7 +94,7 @@ local CONFIG = {
 --=========================== СЛУЖБЫ И ХЕЛПЕРЫ ===============================--
 
 local PREFIX  = "[EggScanner]"
-local VERSION = "v14-track"
+local VERSION = "v15-track"
 
 local Players           = game:GetService("Players")
 local TeleportService   = game:GetService("TeleportService")
@@ -579,8 +580,10 @@ local EGG_SKIP_WORDS = {
 	"display", "storage", "pedestal", "sign", "shop",
 }
 
--- Контейнеры, в которых реально лежат яйца
-local EGG_CONTAINERS = { "worldeggs", "eggnests" }
+-- Контейнеры, в которых реально лежат яйца (включая трек)
+local EGG_CONTAINERS = {
+	"worldeggs", "eggnests", "eggpoint", "eggspawn", "eggspot", "eggs",
+}
 
 local function isEggContainerName(name)
 	local lower = string.lower(tostring(name))
@@ -600,11 +603,48 @@ end
 	Так отсекаются витрины/пьюты с питомцами, из-за которых раньше
 	в топ попадали объекты вида 11654316434_8f699e...
 ]]
+-- Эвентовые миры (HalloweenDimension и т.п.) — не трогаем
+local function isEventWorld(instance)
+	local lower = string.lower(tostring(instance.Name))
+	return string.find(lower, "dimension", 1, true) ~= nil
+		or string.find(lower, "halloween", 1, true) ~= nil
+end
+
+local function insideEventWorld(instance)
+	local node = instance
+	for _ = 1, 6 do
+		if not node or node == workspace then
+			break
+		end
+		if isEventWorld(node) then
+			return true
+		end
+		node = node.Parent
+	end
+	return false
+end
+
 local function isEggLike(instance)
 	if instance:IsA("Folder") then
 		return false
 	end
 
+	if CONFIG.IGNORE_EVENT_WORLDS and insideEventWorld(instance) then
+		return false
+	end
+
+	-- 1) лежит прямо в контейнере яиц (WorldEggs, EggNests, EggPoint, EggSpawn...)
+	local parent = instance.Parent
+	if parent and isEggContainerName(parent.Name) then
+		return true
+	end
+
+	local grandParent = parent and parent.Parent
+	if grandParent and isEggContainerName(grandParent.Name) then
+		return true
+	end
+
+	-- 2) переносимое яйцо
 	local ok, attributes = pcall(function()
 		return instance:GetAttributes()
 	end)
@@ -616,6 +656,7 @@ local function isEggLike(instance)
 		end
 	end
 
+	-- 3) имя с "egg" и не обвязка
 	local lowerName = string.lower(tostring(instance.Name))
 	if isEggName(lowerName) then
 		for _, word in ipairs(EGG_SKIP_WORDS) do
@@ -623,16 +664,6 @@ local function isEggLike(instance)
 				return false
 			end
 		end
-		return true
-	end
-
-	local parent = instance.Parent
-	if parent and isEggContainerName(parent.Name) then
-		return true
-	end
-
-	local grandParent = parent and parent.Parent
-	if grandParent and isEggContainerName(grandParent.Name) then
 		return true
 	end
 
@@ -834,7 +865,8 @@ local function collectEggs()
 		tagged[instance] = true
 
 		-- Тег — самый надёжный признак, учитываем такое яйцо даже вне workspace
-		if not seen[instance] and instance.Parent ~= nil then
+		if not seen[instance] and instance.Parent ~= nil
+			and not (CONFIG.IGNORE_EVENT_WORLDS and insideEventWorld(instance)) then
 			local entry = buildEggEntry(instance)
 			if entry then
 				seen[instance] = true
@@ -859,7 +891,9 @@ local function collectEggs()
 
 		local shouldDescend = true
 
-		if instance ~= workspace and instance.Parent ~= nil then
+		if CONFIG.IGNORE_EVENT_WORLDS and isEventWorld(instance) then
+			shouldDescend = false
+		elseif instance ~= workspace and instance.Parent ~= nil then
 			local matched = tagged[instance] or isEggLike(instance)
 
 			if matched and not seen[instance] then
@@ -1587,33 +1621,32 @@ local function collectRecon()
 	end
 	add("")
 
-	-- биомы: папки типа EnchantedForestDimension
-	local biomeCount = 0
-	local biomeLines = {}
-	for _, child in ipairs(workspace:GetChildren()) do
-		local lower = string.lower(child.Name)
-		if string.find(lower, "dimension", 1, true) or string.find(lower, "biome", 1, true) then
-			biomeCount = biomeCount + 1
-			if #biomeLines < 15 then
-				local eggsFolder = child:FindFirstChild("WorldEggs")
-						or child:FindFirstChild("Eggs")
-						or child:FindFirstChild("EggNests")
-				local eggCount = "нет"
-				if eggsFolder then
-					eggCount = tostring(#(eggsFolder:GetChildren()))
-				end
-				biomeLines[#biomeLines + 1] = string.format("%s (%s) | яиц: %s",
-					tostring(child.Name):sub(1, 34), child.ClassName, eggCount)
-			end
+	-- биомы трека: Workspace.World.Areas.GuardAreas.<Area>
+	local areaNames = {}
+	local world = workspace:FindFirstChild("World")
+	local areasFolder = world and world:FindFirstChild("Areas")
+	local guardAreas = areasFolder and areasFolder:FindFirstChild("GuardAreas")
+
+	if guardAreas then
+		for _, area in ipairs(guardAreas:GetChildren()) do
+			areaNames[#areaNames + 1] = string.format("%s (%d детей)",
+				tostring(area.Name):sub(1, 30), #(area:GetChildren()))
 		end
 	end
 
-	add("[Биомы] найдено: %d", biomeCount)
-	if biomeCount == 0 then
-		add("нет папок с Dimension/Biome в Workspace")
+	for _, child in ipairs(workspace:GetChildren()) do
+		local lower = string.lower(tostring(child.Name))
+		if string.find(lower, "dimension", 1, true) or string.find(lower, "biome", 1, true) then
+			areaNames[#areaNames + 1] = tostring(child.Name) .. " (эвент)"
+		end
+	end
+
+	add("[Биомы] найдено: %d", #areaNames)
+	if #areaNames == 0 then
+		add("нет GuardAreas и Dimension")
 	else
-		for _, line in ipairs(biomeLines) do
-			add(line)
+		for index = 1, math.min(#areaNames, 15) do
+			add("  " .. areaNames[index])
 		end
 	end
 	add("")
@@ -1783,7 +1816,12 @@ local function findEggSamples(limit)
 				end
 			end
 
-			if not skipped then
+			if skipped then
+				-- это контейнер (EggPoint, EggSpawn...), заходим внутрь
+				for _, child in ipairs(instance:GetChildren()) do
+					stack[#stack + 1] = child
+				end
+			else
 				local score = 0
 				if instance.Parent and isEggName(instance.Parent.Name) then
 					score = score + 3
@@ -2362,6 +2400,18 @@ local function main()
 				"Сервер %s | объектов %d | яиц %d | типов %d | хэш %s",
 				tostring(game.JobId):sub(1, 8), scanned, eggCount or 0, types, hash
 			))
+
+			local biomesSeen, biomeList = {}, {}
+			for _, egg in ipairs(allEggs or {}) do
+				local biomeName = tostring(egg.biome or "?")
+				if not biomesSeen[biomeName] then
+					biomesSeen[biomeName] = true
+					biomeList[#biomeList + 1] = biomeName
+				end
+			end
+			if #biomeList > 0 then
+				addLog("Биомы: " .. table.concat(biomeList, ", "):sub(1, 90))
+			end
 
 			if truncated then
 				log("Скан остановлен лимитом MAX_SCAN_OBJECTS — возможно, карта слишком большая")
