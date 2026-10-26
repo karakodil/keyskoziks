@@ -78,6 +78,7 @@ local CONFIG = {
 	MAX_SERVER_PAGES  = 3,           -- сколько страниц серверов листать
 	MIN_FREE_SLOTS    = 1,           -- минимум свободных мест на целевом сервере
 	TELEPORT_COOLDOWN = 10,          -- антифлуд телепортов, сек
+	FALLBACK_TELEPORT = false,       -- Teleport() по PlaceId может вернуть на тот же сервер
 
 	MAX_SCAN_OBJECTS  = 200000,      -- предохранитель от зависания на огромных картах
 	SCAN_REPLICATED   = false,       -- сканировать ещё и ReplicatedStorage
@@ -92,7 +93,7 @@ local CONFIG = {
 --=========================== СЛУЖБЫ И ХЕЛПЕРЫ ===============================--
 
 local PREFIX  = "[EggScanner]"
-local VERSION = "v12-top3"
+local VERSION = "v13-hash"
 
 local Players           = game:GetService("Players")
 local TeleportService   = game:GetService("TeleportService")
@@ -358,7 +359,8 @@ local function hopServer(reason)
 
 	local jobBefore = game.JobId
 
-	log("Хоп (" .. tostring(reason) .. "): получаю список серверов")
+	log(string.format("Хоп (%s): текущий сервер %s",
+		tostring(reason), tostring(jobBefore):sub(1, 8)))
 	local servers = getServers()
 	local candidates = buildCandidates(servers)
 
@@ -385,7 +387,11 @@ local function hopServer(reason)
 	end
 
 	if #candidates == 0 then
-		log("Серверов нет вообще — Teleport() (может вернуть на тот же сервер)")
+		if not CONFIG.FALLBACK_TELEPORT then
+			log("Серверов нет вообще — остаёмся (fallback выключен)")
+			return false
+		end
+		log("Серверов нет вообще — Teleport()")
 		local ok = pcall(function()
 			TeleportService:Teleport(CONFIG.PLACE_ID, LocalPlayer)
 		end)
@@ -425,7 +431,12 @@ local function hopServer(reason)
 		task.wait(2)
 	end
 
-	log("Все JobId не сработали — Teleport()")
+	if not CONFIG.FALLBACK_TELEPORT then
+		log("Все JobId не сработали — остаёмся (fallback выключен)")
+		return false
+	end
+
+	log("Все JobId не сработали — Teleport() (может вернуть на тот же сервер)")
 	local ok = pcall(function()
 		TeleportService:Teleport(CONFIG.PLACE_ID, LocalPlayer)
 	end)
@@ -874,6 +885,23 @@ local function collectEggs()
 	end
 
 	return results, truncated, scanned
+end
+
+-- Короткий «отпечаток» набора яиц: по нему видно, одинаковые ли яйца на серверах
+local function eggFingerprint(eggs)
+	local parts = {}
+	for _, egg in ipairs(eggs) do
+		parts[#parts + 1] = tostring(egg.pet or "?") .. ":" .. tostring(egg.uid or "?")
+	end
+	table.sort(parts)
+
+	local text = table.concat(parts, ";")
+	local hash = 0
+	for index = 1, #text do
+		hash = (hash * 31 + string.byte(text, index)) % 4294967296
+	end
+
+	return string.format("%08x", hash)
 end
 
 -- Собираем лучшее яйцо по каждому имени, затем выбираем максимум
@@ -2275,9 +2303,10 @@ local function main()
 
 			local best, types, truncated, scanned, allEggs, eggCount, ranked = scanServer()
 
+			local hash = eggFingerprint(allEggs or {})
 			addLog(string.format(
-				"Скан: объектов %d | яиц %d | типов %d | Job %s",
-				scanned, eggCount or 0, types, tostring(game.JobId):sub(1, 8)
+				"Сервер %s | объектов %d | яиц %d | типов %d | хэш %s",
+				tostring(game.JobId):sub(1, 8), scanned, eggCount or 0, types, hash
 			))
 
 			if truncated then
@@ -2442,6 +2471,7 @@ if isTest then
 		hopServer    = hopServer,
 		sendWebhook  = sendWebhook,
 		collectRecon = collectRecon,
+		eggFingerprint = eggFingerprint,
 		collectEggInspect = collectEggInspect,
 		uploadText   = uploadText,
 		deliverReport = deliverReport,
