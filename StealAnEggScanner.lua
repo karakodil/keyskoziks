@@ -97,10 +97,109 @@ local CONFIG = {
 	VERBOSE           = true,
 }
 
+local FALLBACK_PETS = {
+	chicken = 1,
+	dog = 2,
+	bird = 8,
+	owl = 35,
+	raccoon = 45,
+	bear = 240,
+	fox = 180,
+	brrbrrpatapim = 1800,
+	frog = 3,
+	duckling = 4,
+	catfish = 12,
+	turtle = 60,
+	trulimerotrulicina = 260,
+	swan = 320,
+	axolotl = 2800,
+	leviathan = 220000,
+	jerboa = 6,
+	fennec = 18,
+	camel = 75,
+	tobtobitobtob = 325,
+	snake = 3600,
+	scorpion = 18500,
+	sandspider = 16000,
+	royalsphinx = 280000,
+	toucan = 110,
+	chimpanzee = 90,
+	crocodile = 420,
+	gorilla = 4800,
+	orangutiniananassini = 5500,
+	spider = 22000,
+	tiger = 28000,
+	kingsnake = 3500000,
+	penguin = 140,
+	walrus = 600,
+	polarbear = 7000,
+	sabertoothtiger = 35000,
+	mammoth = 42000,
+	kingmammoth = 400000,
+	yeti = 5000000,
+	icedragon = 65000000,
+	lavagecko = 180,
+	lavafrog = 850,
+	flamingbull = 9500,
+	lavaiguana = 11000,
+	chillinchilli = 55000,
+	cerberus = 8000000,
+	phoenix = 85000000,
+	lavadragon = 100000000,
+	parrotfish = 220,
+	swordfish = 1100,
+	shark = 15000,
+	orca = 80000,
+	whaleshark = 700000,
+	belugawhale = 850000,
+	kraken = 15000000,
+	elmaja = 130000000,
+	dodo = 280,
+	pterodactyl = 22000,
+	ankylosaurus = 120000,
+	triceratops = 1200000,
+	bronto = 1500000,
+	tralaledon = 32000000,
+	trex = 25000000,
+	mosasaurus = 180000000,
+	centapede = 1500,
+	cosmicgecko = 30000,
+	cosmicgorilla = 180000,
+	lavaccasaturnosaturnita = 2200000,
+	cosmicdragon = 60000000,
+	cosmicskeletonboss = 45000000,
+	eternallunardragon = 250000000,
+	unicorn = 1000000000,
+	crane = 4000,
+	salamander = 74000,
+	redpanda = 450000,
+	koi = 12000000,
+	snowyowl = 7500000,
+	stag = 145000000,
+	onitiger = 600000000,
+	kitsune = 1800000000,
+	crustacia = 130000,
+	spideron = 95000,
+	bladehide = 750000,
+	mantaris = 11000000,
+	rhinotaur = 17500000,
+	mutantshark = 215000000,
+	gorillaking = 880000000,
+	dreadscale = 8000000000,
+}
+
+local MUTATION_MULT = {
+	["Spirit Bloom"] = 3.0,
+	["Rainbow"] = 2.5,
+	["Golden"] = 2.0,
+	["Bloom"] = 1.5,
+	["Silver"] = 1.25,
+}
+
 --=========================== СЛУЖБЫ И ХЕЛПЕРЫ ===============================--
 
 local PREFIX  = "[EggScanner]"
-local VERSION = "v54-mesh"
+local VERSION = "v55-db"
 
 local Players           = game:GetService("Players")
 local TeleportService   = game:GetService("TeleportService")
@@ -1166,6 +1265,13 @@ local function getPetIncome(petName)
 	end
 
 	if type(entry) ~= "table" then
+		local fallback = FALLBACK_PETS[normalizeKey(petName)]
+		if fallback then
+			return fallback, "fallback_db"
+		end
+	end
+
+	if type(entry) ~= "table" then
 		local wanted = string.lower(tostring(petName))
 		for key, value in pairs(assets.Directory) do
 			if string.lower(tostring(key)) == wanted then
@@ -1504,6 +1610,26 @@ local function buildEggEntry(instance)
 		displayName = pet
 	end
 
+	-- множитель мутации (Silver/Golden/Rainbow/…) из атрибутов
+	local mult = 1
+	local mutationName = nil
+	if type(attributes) == "table" then
+		for name, value in pairs(attributes) do
+			local lower = string.lower(tostring(name))
+			if string.find(lower, "mutation", 1, true) and type(value) == "string" then
+				local candidate = MUTATION_MULT[value]
+				if candidate and candidate > mult then
+					mult = candidate
+					mutationName = value
+				end
+			end
+		end
+	end
+
+	if mult > 1 and finalIncome and finalIncome > 0 then
+		finalIncome = finalIncome * mult
+	end
+
 	local biome = getBiomeName(instance)
 	if pet then
 		local petArea = getPetAreaIndex()[normalizeKey(pet)]
@@ -1518,6 +1644,8 @@ local function buildEggEntry(instance)
 		income   = finalIncome or 0,
 		pet      = pet,
 		petField = petField,
+		mult     = mult,
+		mutation = mutationName,
 		value    = value or 0,
 		uid      = uid,
 		uidName  = uidName,
